@@ -115,18 +115,8 @@ if st.session_state.races_df is not None:
                                 print(f"締切時間計算エラー: {e}")
                                 time_info = "時刻不明"
                             
-                            # 結果を表示
+                            # 予測完了のメッセージのみ表示（テーブルは表示しない）
                             st.success(f"予測完了!（{predict_time.strftime('%H:%M:%S')} 時点 / {time_info}）")
-                            st.dataframe(result_df, use_container_width=True)
-                            
-                            # 期待値が1.0を超える艇（プラス期待値の艇）を抽出
-                            plus_ev_boats = result_df[result_df['期待値'] > 1.0]
-                            if not plus_ev_boats.empty:
-                                st.write("#### 💰 おすすめ買い目（期待値が1.0を超える艇）")
-                                for _, boat_row in plus_ev_boats.iterrows():
-                                    st.write(f"艇番 **{int(boat_row['艇番'])}**: 期待値 **{boat_row['期待値']}**")
-                            else:
-                                st.info("※ 期待値が1.0を超える艇はありません")
                         else:
                             st.error("予測に失敗しました。締切済みのレースか、データ不足の可能性があります。")
                     except Exception as e:
