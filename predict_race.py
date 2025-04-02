@@ -399,7 +399,7 @@ def predict_single_race(race_id):
         df_processed["期待値"] = df_processed["pred_proba"] * df_processed["単勝オッズ"]
 
         # 結果のデータフレームを作成
-        df_result = df_processed[["艇番", "選手名", "pred_proba", "単勝オッズ", "期待値"]].sort_values("期待値", ascending=False)
+        df_result = df_processed[["艇番", "選手名", "pred_proba", "単勝オッズ", "期待値"]].sort_values("pred_proba", ascending=False)
         df_result.columns = ["艇番", "選手名", "勝率(予測)", "単勝オッズ", "期待値"]
 
         # 勝率を%表示に変換
