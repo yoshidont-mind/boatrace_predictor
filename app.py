@@ -98,10 +98,21 @@ if st.session_state.races_df is not None:
                             
                             # 締切までの残り時間計算
                             try:
-                                deadline_time = pd.to_datetime(row['締切予定時刻'])
+                                # 締切予定時刻が時:分 形式の場合は当日の日付を追加
+                                deadline_str = row['締切予定時刻']
+                                if ':' in deadline_str and len(deadline_str) <= 5:  # e.g. "15:17"
+                                    today_str = predict_time.strftime("%Y-%m-%d")
+                                    deadline_str = f"{today_str} {deadline_str}"
+                                
+                                deadline_time = pd.to_datetime(deadline_str)
+                                # もし締切時刻のタイムゾーン情報がなければ、予測時刻と同じタイムゾーンを設定
+                                if predict_time.tzinfo and not deadline_time.tzinfo:
+                                    deadline_time = pytz.timezone('Asia/Tokyo').localize(deadline_time)
+                                
                                 time_to_deadline = int((deadline_time - predict_time).total_seconds() / 60)
-                                time_info = f"締切 {row['締切予定時刻']} の {time_to_deadline}分前"
-                            except:
+                                time_info = f"締切{time_to_deadline}分前"
+                            except Exception as e:
+                                print(f"締切時間計算エラー: {e}")
                                 time_info = "時刻不明"
                             
                             # 結果を表示
@@ -127,10 +138,21 @@ if st.session_state.races_df is not None:
                 
                 # 締切までの残り時間計算
                 try:
-                    deadline_time = pd.to_datetime(row['締切予定時刻'])
+                    # 締切予定時刻が時:分 形式の場合は当日の日付を追加
+                    deadline_str = row['締切予定時刻']
+                    if ':' in deadline_str and len(deadline_str) <= 5:  # e.g. "15:17"
+                        today_str = saved_time.strftime("%Y-%m-%d")
+                        deadline_str = f"{today_str} {deadline_str}"
+                    
+                    deadline_time = pd.to_datetime(deadline_str)
+                    # もし締切時刻のタイムゾーン情報がなければ、保存時刻と同じタイムゾーンを設定
+                    if saved_time.tzinfo and not deadline_time.tzinfo:
+                        deadline_time = pytz.timezone('Asia/Tokyo').localize(deadline_time)
+                    
                     time_to_deadline = int((deadline_time - saved_time).total_seconds() / 60)
-                    time_info = f"締切 {row['締切予定時刻']} の {time_to_deadline}分前"
-                except:
+                    time_info = f"締切{time_to_deadline}分前"
+                except Exception as e:
+                    print(f"締切時間計算エラー: {e}")
                     time_info = "時刻不明"
                 
                 st.write(f"#### 最新予測結果（{saved_time.strftime('%H:%M:%S')} 時点 / {time_info}）")
