@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import pickle
 import time
+import pytz
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -21,6 +22,8 @@ if "races_df" not in st.session_state:
     st.session_state.races_df = None
 if "last_updated" not in st.session_state:
     st.session_state.last_updated = None
+if "prediction_results" not in st.session_state:
+    st.session_state.prediction_results = {}  # race_id -> [result_df, predict_time]
 
 # ====== レース一覧取得ボタンと更新ボタン ======
 col1, col2 = st.columns([3, 1])
@@ -28,36 +31,118 @@ col1, col2 = st.columns([3, 1])
 with col1:
     if st.button("📋 本日のレース一覧を取得"):
         with st.spinner("取得中..."):
-            st.session_state.races_df = get_today_races()
-            st.session_state.last_updated = datetime.now()
+            try:
+                st.session_state.races_df = get_today_races()
+                st.session_state.last_updated = datetime.now()
+            except Exception as e:
+                st.error(f"レース情報の取得に失敗しました: {e}")
 
 with col2:
     if st.button("↻ 一覧を更新"):
-        with st.spinner("再取得..."):
-            st.session_state.races_df = get_today_races()
-            st.session_state.last_updated = datetime.now()
+        with st.spinner("再取得中..."):
+            try:
+                st.session_state.races_df = get_today_races()
+                st.session_state.last_updated = datetime.now()
+            except Exception as e:
+                st.error(f"レース情報の更新に失敗しました: {e}")
 
 # ====== レース一覧表示 ======
 if st.session_state.races_df is not None:
     races_df = st.session_state.races_df.copy()
+    
+    # 締切予定時刻の処理（時刻データのみなら日付を追加）
+    if '締切予定時刻' in races_df.columns:
+        def format_time(time_str):
+            if pd.isna(time_str) or time_str == "不明":
+                return "不明"
+            # すでに日付が含まれているか確認
+            if ':' in time_str and len(time_str) <= 5:  # e.g. "15:30"
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                return f"{today_str} {time_str}"
+            return time_str
+        
+        races_df['締切予定時刻'] = races_df['締切予定時刻'].apply(format_time)
+        
+    # データフレームを締切時刻でソート
     races_df = races_df.sort_values("締切予定時刻")
 
+    # JSTタイムゾーンの設定
+    jst = pytz.timezone('Asia/Tokyo')
+    now_jst = datetime.now(jst)
+    
     st.write(f"### 🕰️ 最終更新: {st.session_state.last_updated.strftime('%Y/%m/%d %H:%M:%S')} 現在")
     st.dataframe(races_df, use_container_width=True)
 
-    # ===== 各レースごとに「予測」ボタン表示 =====
+    # ===== レーステーブル表示 =====
+    st.write("### ⛵ 今日のレース一覧")
+    
+    # レース一覧を表示するコンテナを作成
+    races_container = st.container()
+    
+    # 各レースごとにカードスタイルで表示
     for i, row in races_df.iterrows():
         race_id = row["レースID"]
-        st.write("---")
-        st.markdown(f"#### ⛵ {row['場']} {row['R']}R / 締切: {row['締切予定時刻']}")
-        if st.button(f"🤖 このレース({row['場']} {row['R']}R)を予測", key=f"predict_{race_id}"):
-            with st.spinner("データ取得 → 前処理 → 予測..."):
-                time.sleep(1.0)  # テスト用ウェイト
-                result_df, predict_time = predict_single_race(race_id)
-                if result_df is not None:
-                    st.success(f"予測完了!（{predict_time.strftime('%H:%M:%S')} 時点 / 締切 {row['締切予定時刻']} の {int((pd.to_datetime(row['締切予定時刻']) - predict_time).total_seconds() / 60)}分前）")
-                    st.dataframe(result_df, use_container_width=True)
+        
+        with races_container.expander(f"【{row['場']} {row['R']}R】締切: {row['締切予定時刻']} / ステータス: {row['ステータス']}"):
+            # レースごとの予測結果を表示するコンテナ
+            result_container = st.container()
+            
+            # 予測ボタン
+            if st.button(f"🔮 このレースを予測する", key=f"predict_{race_id}"):
+                with st.spinner("直前情報の取得 → オッズ収集 → モデル予測中..."):
+                    try:
+                        result_df, predict_time = predict_single_race(race_id)
+                        if result_df is not None:
+                            # 予測結果をセッションに保存
+                            st.session_state.prediction_results[race_id] = [result_df, predict_time]
+                            
+                            # 締切までの残り時間計算
+                            try:
+                                deadline_time = pd.to_datetime(row['締切予定時刻'])
+                                time_to_deadline = int((deadline_time - predict_time).total_seconds() / 60)
+                                time_info = f"締切 {row['締切予定時刻']} の {time_to_deadline}分前"
+                            except:
+                                time_info = "時刻不明"
+                            
+                            # 結果を表示
+                            st.success(f"予測完了!（{predict_time.strftime('%H:%M:%S')} 時点 / {time_info}）")
+                            st.dataframe(result_df, use_container_width=True)
+                            
+                            # 期待値が1.0を超える艇（プラス期待値の艇）を抽出
+                            plus_ev_boats = result_df[result_df['期待値'] > 1.0]
+                            if not plus_ev_boats.empty:
+                                st.write("#### 💰 おすすめ買い目（期待値が1.0を超える艇）")
+                                for _, boat_row in plus_ev_boats.iterrows():
+                                    st.write(f"艇番 **{int(boat_row['艇番'])}**: 期待値 **{boat_row['期待値']}**")
+                            else:
+                                st.info("※ 期待値が1.0を超える艇はありません")
+                        else:
+                            st.error("予測に失敗しました。締切済みのレースか、データ不足の可能性があります。")
+                    except Exception as e:
+                        st.error(f"予測処理中にエラーが発生しました: {e}")
+            
+            # 過去の予測結果があれば表示
+            if race_id in st.session_state.prediction_results:
+                saved_result, saved_time = st.session_state.prediction_results[race_id]
+                
+                # 締切までの残り時間計算
+                try:
+                    deadline_time = pd.to_datetime(row['締切予定時刻'])
+                    time_to_deadline = int((deadline_time - saved_time).total_seconds() / 60)
+                    time_info = f"締切 {row['締切予定時刻']} の {time_to_deadline}分前"
+                except:
+                    time_info = "時刻不明"
+                
+                st.write(f"#### 最新予測結果（{saved_time.strftime('%H:%M:%S')} 時点 / {time_info}）")
+                st.dataframe(saved_result, use_container_width=True)
+                
+                # 期待値が1.0を超える艇（プラス期待値の艇）を抽出
+                plus_ev_boats = saved_result[saved_result['期待値'] > 1.0]
+                if not plus_ev_boats.empty:
+                    st.write("#### 💰 おすすめ買い目（期待値が1.0を超える艇）")
+                    for _, boat_row in plus_ev_boats.iterrows():
+                        st.write(f"艇番 **{int(boat_row['艇番'])}**: 期待値 **{boat_row['期待値']}**")
                 else:
-                    st.error("予測に失敗しました...")
+                    st.info("※ 期待値が1.0を超える艇はありません")
 else:
     st.info("'本日のレース一覧を取得'ボタンを押してください")

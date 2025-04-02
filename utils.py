@@ -29,9 +29,14 @@ def preprocess_boatrace_dataframe(df):
     for col in rate_cols:
         df[col] = df[col].fillna(df[col].median())
 
+    # 数値型への変換（展示タイム）
+    if "展示タイム" in df.columns:
+        df["展示タイム"] = pd.to_numeric(df["展示タイム"], errors="coerce")  # 文字列は欠損値に変換
+
     # 異常値クリップ
     df["モーター2連率"] = df["モーター2連率"].clip(0, 100)
-    df["展示タイム"] = df["展示タイム"].clip(6.3, 7.2)
+    if "展示タイム" in df.columns:
+        df["展示タイム"] = df["展示タイム"].clip(6.3, 7.2)
 
     # 月・曜日抽出（存在すれば）
     if "日付" in df.columns:

@@ -6,3 +6,4 @@ lightgbm
 pyjpboatrace
 beautifulsoup4
 requests
+pytz
