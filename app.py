@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from predict_race import predict_single_race
-from retrieve_today_races import get_today_races
+from retrieve_today_races import get_races_by_date, get_available_dates
 
 st.set_page_config(page_title="競艇予測アプリ", layout="wide")
 st.title("🎉 競艇予測アプリ")
@@ -24,31 +24,53 @@ if "last_updated" not in st.session_state:
     st.session_state.last_updated = None
 if "prediction_results" not in st.session_state:
     st.session_state.prediction_results = {}  # race_id -> [result_df, predict_time]
+if "selected_date" not in st.session_state:
+    st.session_state.selected_date = datetime.now().strftime("%Y-%m-%d")
 
-# ====== レース一覧取得ボタンと更新ボタン ======
+# ====== 日付選択と一覧取得 ======
 col1, col2 = st.columns([3, 1])
 
 with col1:
-    if st.button("📋 本日のレース一覧を取得"):
-        with st.spinner("取得中..."):
-            try:
-                st.session_state.races_df = get_today_races()
-                st.session_state.last_updated = datetime.now()
-            except Exception as e:
-                st.error(f"レース情報の取得に失敗しました: {e}")
-
-with col2:
-    if st.button("↻ 一覧を更新"):
-        with st.spinner("再取得中..."):
-            try:
-                st.session_state.races_df = get_today_races()
-                st.session_state.last_updated = datetime.now()
-            except Exception as e:
-                st.error(f"レース情報の更新に失敗しました: {e}")
+    # 利用可能な日付一覧を取得
+    available_dates = get_available_dates()
+    
+    if not available_dates:
+        st.warning("レース情報ファイルが見つかりません。data/race_infoディレクトリを確認してください。")
+    else:
+        # デフォルトで本日の日付を選択
+        today = datetime.now().strftime("%Y-%m-%d")
+        default_index = 0
+        
+        # 本日の日付が利用可能な場合はそれを選択
+        if today in available_dates:
+            default_index = available_dates.index(today)
+        
+        # 日付選択ウィジェット
+        selected_date = st.selectbox(
+            "日付を選択:",
+            available_dates,
+            index=default_index
+        )
+        
+        # 日付が変更されたらレース一覧を更新
+        if selected_date != st.session_state.selected_date:
+            st.session_state.selected_date = selected_date
+            with st.spinner(f"{selected_date} のレース一覧を取得中..."):
+                try:
+                    st.session_state.races_df = get_races_by_date(selected_date)
+                    st.session_state.last_updated = datetime.now()
+                except Exception as e:
+                    st.error(f"レース情報の取得に失敗しました: {e}")
 
 # ====== レース一覧表示 ======
 if st.session_state.races_df is not None:
     races_df = st.session_state.races_df.copy()
+    
+    # 不要な列を削除
+    if 'レースID' in races_df.columns:
+        races_df = races_df.drop(columns=['レースID'])
+    if 'ステータス' in races_df.columns:
+        races_df = races_df.drop(columns=['ステータス'])
     
     # 締切予定時刻の処理（時刻データのみなら日付を追加）
     if '締切予定時刻' in races_df.columns:
@@ -70,7 +92,7 @@ if st.session_state.races_df is not None:
     jst = pytz.timezone('Asia/Tokyo')
     now_jst = datetime.now(jst)
     
-    st.write(f"### 🕰️ 最終更新: {st.session_state.last_updated.strftime('%Y/%m/%d %H:%M:%S')} 現在")
+    # 最終更新のタイムスタンプを削除
     st.dataframe(races_df, use_container_width=True)
 
     # ===== レーステーブル表示 =====
@@ -81,11 +103,18 @@ if st.session_state.races_df is not None:
     
     # 各レースごとにカードスタイルで表示
     for i, row in races_df.iterrows():
-        race_id = row["レースID"]
+        race_id = st.session_state.races_df.loc[i, "レースID"]
         
-        with races_container.expander(f"【{row['場']} {row['R']}R】締切: {row['締切予定時刻']} / ステータス: {row['ステータス']}"):
+        with races_container.expander(f"【{row['レース場']} {row['レース番号']}R】締切: {row['締切予定時刻']}"):
             # レースごとの予測結果を表示するコンテナ
             result_container = st.container()
+            
+            # レース結果ページへのリンク表示
+            date_part = race_id[:8]
+            venue_code = race_id[8:10]
+            race_num = race_id[10:]
+            result_url = f"https://www.boatrace.jp/owpc/pc/race/raceresult?rno={race_num}&jcd={venue_code}&hd={date_part}"
+            st.markdown(f"[🏁 このレースの結果を確認する]({result_url})")
             
             # 予測ボタン
             if st.button(f"🔮 このレースを予測する", key=f"predict_{race_id}"):
@@ -93,6 +122,17 @@ if st.session_state.races_df is not None:
                     try:
                         result_df, predict_time = predict_single_race(race_id)
                         if result_df is not None:
+                            # 選手名列を削除
+                            if '選手名' in result_df.columns:
+                                result_df = result_df.drop(columns=['選手名'])
+                            
+                            # 順位列（最初の列）をソート
+                            if '順位' in result_df.columns:
+                                result_df = result_df.sort_values('順位')
+                            else:
+                                # 最初の列が順位を表す場合（列名がない場合も考慮）
+                                result_df = result_df.sort_values(result_df.columns[0])
+                            
                             # 予測結果をセッションに保存
                             st.session_state.prediction_results[race_id] = [result_df, predict_time]
                             
@@ -125,6 +165,17 @@ if st.session_state.races_df is not None:
             # 過去の予測結果があれば表示
             if race_id in st.session_state.prediction_results:
                 saved_result, saved_time = st.session_state.prediction_results[race_id]
+                
+                # 選手名列を削除（すでに削除されていない場合）
+                if '選手名' in saved_result.columns:
+                    saved_result = saved_result.drop(columns=['選手名'])
+                
+                # 順位列（最初の列）でソート
+                if '順位' in saved_result.columns:
+                    saved_result = saved_result.sort_values('順位')
+                else:
+                    # 最初の列が順位を表す場合（列名がない場合も考慮）
+                    saved_result = saved_result.sort_values(saved_result.columns[0])
                 
                 # 締切までの残り時間計算
                 try:

@@ -1,57 +1,113 @@
 import pandas as pd
-from pyjpboatrace import PyJPBoatrace
-from pyjpboatrace.const import STADIUMS_MAP
+import os
+import glob
+from pathlib import Path
 from datetime import datetime, date
 
-# ====== 本日のレース一覧を取得する関数 ======
+# ====== 指定日付のレース一覧を取得する関数 ======
+def get_races_by_date(selected_date=None):
+    """
+    指定日付のレース一覧をCSVファイルから取得する
+    
+    Parameters:
+    -----------
+    selected_date : datetime or str, optional
+        取得する日付。指定しない場合は本日の日付を使用
+        
+    Returns:
+    --------
+    pandas.DataFrame or None
+        レース一覧のデータフレーム。適切なファイルが見つからない場合はNone
+    """
+    if selected_date is None:
+        selected_date = datetime.today()
+    elif isinstance(selected_date, str):
+        selected_date = datetime.strptime(selected_date, "%Y-%m-%d")
+    
+    date_str = selected_date.strftime("%Y%m%d")
+    
+    # data/race_info ディレクトリ内の該当日付のファイルを検索
+    race_info_dir = Path("data/race_info")
+    pattern = f"races_{date_str}*.csv"
+    matching_files = list(race_info_dir.glob(pattern))
+    
+    if not matching_files:
+        print(f"⚠️ {date_str} に対応するレース情報ファイルが見つかりません")
+        return None
+    
+    # 時刻（hhmm）が最新のファイルを選択
+    latest_file = max(matching_files, key=lambda f: f.name)
+    print(f"📂 {latest_file.name} を読み込みます")
+    
+    # CSVファイル読み込み
+    df = pd.read_csv(latest_file)
+    
+    # 重複を排除（レースID、レース場、レース番号でグループ化して最初の行を取得）
+    df = df.drop_duplicates(subset=["レース場", "レース番号", "日付"])
+    
+    # レースIDを再構築
+    def format_race_id(row):
+        date_part = row["日付"].replace("-", "")
+        venue_map = {
+            '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
+            '浜名湖': '06', '蒲郡': '07', '常滑': '08', '津': '09', '三国': '10',
+            'びわこ': '11', '住之江': '12', '尼崎': '13', '鳴門': '14', '丸亀': '15',
+            '児島': '16', '宮島': '17', '徳山': '18', '下関': '19', '若松': '20',
+            '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
+        }
+        venue_code = venue_map.get(row["レース場"], "00")
+        race_no = int(row["レース番号"])
+        return f"{date_part}{venue_code}{race_no:02d}"
+    
+    df["レースID"] = df.apply(format_race_id, axis=1)
+    
+    # 締切予定時刻でソート
+    if "締切予定時刻" in df.columns:
+        df = df.sort_values("締切予定時刻")
+    
+    # 必要な列のみ選択
+    required_columns = ["レースID", "日付", "レース場", "レース番号", "締切予定時刻", "ステータス"]
+    columns_to_select = [col for col in required_columns if col in df.columns]
+    
+    # ステータス列がない場合は追加
+    if "ステータス" not in df.columns:
+        df["ステータス"] = "投票"
+    
+    return df[columns_to_select]
+
+# ====== 利用可能な日付一覧を取得する関数 ======
+def get_available_dates():
+    """
+    CSVファイルから利用可能な日付一覧を取得する
+    
+    Returns:
+    --------
+    list
+        利用可能な日付（YYYY-MM-DD形式）のリスト
+    """
+    race_info_dir = Path("data/race_info")
+    files = glob.glob(str(race_info_dir / "races_*.csv"))
+    
+    dates = set()
+    for file_path in files:
+        filename = os.path.basename(file_path)
+        # ファイル名からYYYYMMDDの部分を抽出（races_YYYYMMDDhhmm.csv）
+        date_str = filename.split('_')[1][:8]
+        if len(date_str) == 8 and date_str.isdigit():
+            # YYYY-MM-DD形式に変換
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            dates.add(formatted_date)
+    
+    return sorted(list(dates))
+
+# 後方互換性のための関数（現行コードとの互換性維持）
 def get_today_races():
-    today = datetime.today()
-    today_str = today.strftime("%Y-%m-%d")
-    today_date = date(today.year, today.month, today.day)
-
-    scraper = PyJPBoatrace()
-    stadiums_info = scraper.get_stadiums(d=today_date)
-    stadium_names = [name for name in stadiums_info.keys() if name != 'date']
-
-    stadium_id_map = {name: id for id, name in STADIUMS_MAP}
-    entries = []
-
-    for stadium in stadium_names:
-        stadium_id = stadium_id_map.get(stadium)
-        if stadium_id is None:
-            continue
-        try:
-            races = scraper.get_12races(d=today_date, stadium=stadium_id)
-            for race_key in races:
-                if race_key in ['date', 'stadium']:
-                    continue
-                race_no = int(race_key.replace("R", ""))
-                race_id = today.strftime("%Y%m%d") + f"{stadium_id:02}{race_no:02}"
-                
-                # 締切予定時刻とステータスの取得 (参照: 9_retrieve_data.py)
-                race_data = races.get(race_key, {})
-                deadline_time = race_data.get('vote_limit')
-                race_status = race_data.get('status', "投票")  # ステータス情報を取得
-                
-                # 時刻部分だけを抽出 (例: "2025-04-01 15:17:00" -> "15:17")
-                if deadline_time and isinstance(deadline_time, str):
-                    try:
-                        deadline_dt = datetime.strptime(deadline_time, "%Y-%m-%d %H:%M:%S")
-                        deadline_time = deadline_dt.strftime("%H:%M")
-                    except Exception as e:
-                        print(f"⚠️ 締切時刻のフォーマット変換でエラー: {e}")
-                        deadline_time = "不明"
-                
-                entries.append({
-                    "レースID": race_id,
-                    "場": stadium,
-                    "R": race_no,
-                    "締切予定時刻": deadline_time,
-                    "ステータス": race_status
-                })
-        except Exception as e:
-            print(f"{stadium} のレース情報取得に失敗: {e}")
-            continue
-
-    df = pd.DataFrame(entries)
-    return df
+    """
+    本日のレース一覧を取得する関数（get_races_by_dateを呼び出し）
+    
+    Returns:
+    --------
+    pandas.DataFrame
+        本日のレース一覧のデータフレーム
+    """
+    return get_races_by_date(None)

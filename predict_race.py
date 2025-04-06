@@ -338,8 +338,31 @@ def predict_single_race(race_id):
 
         # ====== モデル読み込み ======
         try:
-            model_path = Path("models/model_20250401.pkl")
-            print(f"モデルを読み込みます: {model_path}")
+            # レース日から、それより前の最新モデルを選択する
+            race_date = datetime.strptime(date_str, "%Y%m%d").date()
+            model_files = sorted(list(Path("models").glob("model_*.pkl")))
+            
+            # モデルファイル名から日付を抽出して、レース日より前のものから最新を選択
+            valid_models = []
+            for model_file in model_files:
+                try:
+                    # ファイル名からYYYYMMDD部分を抽出
+                    date_part = model_file.stem.split('_')[1]
+                    model_date = datetime.strptime(date_part, "%Y%m%d").date()
+                    
+                    # レース日より前のモデルのみ利用可能
+                    if model_date < race_date:
+                        valid_models.append((model_date, model_file))
+                except (IndexError, ValueError):
+                    pass
+            
+            if not valid_models:
+                raise Exception(f"レース日({race_date})より前の日付のモデルが見つかりません")
+            
+            # 日付で降順ソートして最新のモデルを取得
+            valid_models.sort(reverse=True)
+            latest_model_date, model_path = valid_models[0]
+            print(f"レース日({race_date})に対して、{latest_model_date}のモデルを使用します: {model_path}")
             
             # pickelではなくLightGBM直接の読み込みを試みる
             import lightgbm as lgb
