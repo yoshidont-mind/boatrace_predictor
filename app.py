@@ -80,6 +80,50 @@ if st.session_state.races_df is not None:
         
     # Sort the dataframe by deadline time
     races_df = races_df.sort_values("締切予定時刻")
+    
+    # Create a mapping of Japanese column names to English
+    column_name_mapping = {
+        '日付': 'Date',
+        'レース場': 'Venue',
+        'レース番号': 'Race No.',
+        '締切予定時刻': 'Deadline'
+    }
+    
+    # Create a venue name mapping (Japanese to English)
+    venue_mapping = {
+        '桐生': 'Kiryu',
+        '戸田': 'Toda',
+        '江戸川': 'Edogawa',
+        '平和島': 'Heiwajima',
+        '多摩川': 'Tamagawa',
+        '浜名湖': 'Hamanako',
+        '蒲郡': 'Gamagori',
+        '常滑': 'Tokoname',
+        '津': 'Tsu',
+        '三国': 'Mikuni',
+        '琵琶湖': 'Biwako',
+        '住之江': 'Suminoe',
+        '尼崎': 'Amagasaki',
+        '鳴門': 'Naruto',
+        '丸亀': 'Marugame',
+        '児島': 'Kojima',
+        '宮島': 'Miyajima',
+        '徳山': 'Tokuyama',
+        '下関': 'Shimonoseki',
+        '若松': 'Wakamatsu',
+        '芦屋': 'Ashiya',
+        '福岡': 'Fukuoka',
+        '唐津': 'Karatsu',
+        '大村': 'Omura'
+    }
+    
+    # Rename columns for display only (keep original column names for data processing)
+    display_df = races_df.copy()
+    display_df = display_df.rename(columns=column_name_mapping)
+    
+    # Translate venue names
+    if 'Venue' in display_df.columns:
+        display_df['Venue'] = display_df['Venue'].map(venue_mapping).fillna(display_df['Venue'])
 
     # Set JST timezone
     jst = pytz.timezone('Asia/Tokyo')
@@ -98,7 +142,7 @@ if st.session_state.races_df is not None:
         races_df['レース番号'] = races_df['レース番号'].astype(str)
     
     # Remove the last updated timestamp
-    st.dataframe(races_df, use_container_width=True)
+    st.dataframe(display_df, use_container_width=True)
 
     # ===== Race Table Display =====
     st.write(f"### ⛵ Race List for {selected_date}")
@@ -110,7 +154,9 @@ if st.session_state.races_df is not None:
     for i, row in races_df.iterrows():
         race_id = st.session_state.races_df.loc[i, "レースID"]
         
-        with races_container.expander(f"【{row['レース場']} {row['レース番号']}R】Deadline: {row['締切予定時刻']}"):
+        # Get venue name in English
+        venue_en = venue_mapping.get(row['レース場'], row['レース場'])
+        with races_container.expander(f"【{venue_en} Race No.{row['レース番号']}】Deadline: {row['締切予定時刻']}"):
             # Create a container to display the prediction results for each race
             result_container = st.container()
             
@@ -164,15 +210,29 @@ if st.session_state.races_df is not None:
                     saved_result = saved_result.sort_values(saved_result.columns[0])
                 
                 st.write(f"#### Prediction Results")
-                st.dataframe(saved_result, use_container_width=True)
+                
+                # Create a mapping for prediction result columns
+                prediction_column_mapping = {
+                    '順位': 'Rank',
+                    '艇番': 'Boat No.',
+                    '勝率(予測)': 'Win Rate (Predicted)',
+                    '単勝オッズ': 'Odds',
+                    '期待値': 'Expected Return'
+                }
+                
+                # Rename columns for display
+                display_result = saved_result.copy()
+                display_result = display_result.rename(columns=prediction_column_mapping)
+                
+                st.dataframe(display_result, use_container_width=True)
                 
                 # Extract boats with an expected value greater than 1.0 (positive expected value boats)
                 plus_ev_boats = saved_result[saved_result['期待値'] > 1.0]
                 if not plus_ev_boats.empty:
-                    st.write("#### 💰 Recommended Bets (Boats with an expected value greater than 1.0)")
+                    st.write("#### 💰 Recommended Bets (Boats with an Expected Value greater than 1.0)")
                     for _, boat_row in plus_ev_boats.iterrows():
-                        st.write(f"Boat Number **{int(boat_row['艇番'])}**: Expected Value **{boat_row['期待値']}**")
+                        st.write(f"Boat No. **{int(boat_row['艇番'])}**: Expected Value **{boat_row['期待値']}**")
                 else:
                     st.info("※ No boats with an expected value greater than 1.0")
 else:
-    st.info("Press the 'Get today's race list' button")
+    st.info("Select a date to get the race list")
