@@ -202,20 +202,13 @@ if st.session_state.races_df is not None:
                 if '選手名' in saved_result.columns:
                     saved_result = saved_result.drop(columns=['選手名'])
                 
-                # Sort by the rank column (first column)
-                if '順位' in saved_result.columns:
-                    saved_result = saved_result.sort_values('順位')
-                else:
-                    # Consider the first column as the rank if there is no column name
-                    saved_result = saved_result.sort_values(saved_result.columns[0])
-                
                 st.write(f"#### Prediction Results")
                 
                 # Create a mapping for prediction result columns
                 prediction_column_mapping = {
                     '順位': 'Rank',
                     '艇番': 'Boat No.',
-                    '勝率(予測)': 'Win Rate (Predicted)',
+                    '勝率(予測)': 'Probability of Winning',
                     '単勝オッズ': 'Odds',
                     '期待値': 'Expected Return'
                 }
@@ -223,6 +216,15 @@ if st.session_state.races_df is not None:
                 # Rename columns for display
                 display_result = saved_result.copy()
                 display_result = display_result.rename(columns=prediction_column_mapping)
+                
+                # Convert Probability of Winning to numeric for proper sorting
+                # First remove the % sign and convert to float
+                if 'Probability of Winning' in display_result.columns:
+                    display_result['Probability of Winning'] = display_result['Probability of Winning'].str.rstrip('%').astype('float')
+                    # Sort by Probability of Winning in descending order
+                    display_result = display_result.sort_values('Probability of Winning', ascending=False)
+                    # Add % sign back for display
+                    display_result['Probability of Winning'] = display_result['Probability of Winning'].astype(str) + '%'
                 
                 st.dataframe(display_result, use_container_width=True)
                 
