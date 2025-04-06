@@ -78,14 +78,24 @@ if st.session_state.races_df is not None:
                 return f"{today_str} {time_str}"
             return time_str
         
-        races_df['Deadline Time'] = races_df['締切予定時刻'].apply(format_time)
-        
     # Sort the dataframe by deadline time
-    races_df = races_df.sort_values("Deadline Time")
+    races_df = races_df.sort_values("締切予定時刻")
 
     # Set JST timezone
     jst = pytz.timezone('Asia/Tokyo')
     now_jst = datetime.now(jst)
+    
+    # Reorder columns to match the requested order: "日付", "締切予定時刻", "レース場", "レース番号"
+    if all(col in races_df.columns for col in ['日付', '締切予定時刻', 'レース場', 'レース番号']):
+        column_order = ['日付', '締切予定時刻', 'レース場', 'レース番号']
+        # Add any other columns that exist in the dataframe but not in our ordered list
+        column_order.extend([col for col in races_df.columns if col not in column_order])
+        # Reorder the dataframe columns
+        races_df = races_df[column_order]
+    
+    # Convert レース番号 to string to ensure it displays left-aligned
+    if 'レース番号' in races_df.columns:
+        races_df['レース番号'] = races_df['レース番号'].astype(str)
     
     # Remove the last updated timestamp
     st.dataframe(races_df, use_container_width=True)
