@@ -62,15 +62,15 @@ if st.session_state.races_df is not None:
     races_df = st.session_state.races_df.copy()
     
     # Remove unnecessary columns
-    if 'レースID' in races_df.columns:
+    if 'レースID' in races_df.columns:  # Race ID
         races_df = races_df.drop(columns=['レースID'])
-    if 'ステータス' in races_df.columns:
+    if 'ステータス' in races_df.columns:  # Status
         races_df = races_df.drop(columns=['ステータス'])
     
     # Process deadline time (add date if only time data)
-    if '締切予定時刻' in races_df.columns:
+    if '締切予定時刻' in races_df.columns:  # Deadline
         def format_time(time_str):
-            if pd.isna(time_str) or time_str == "不明":
+            if pd.isna(time_str) or time_str == "不明":  # Unknown
                 return "unknown"
             # Check if the date is already included
             if ':' in time_str and len(time_str) <= 5:  # e.g. "15:30"
@@ -79,14 +79,14 @@ if st.session_state.races_df is not None:
             return time_str
         
     # Sort the dataframe by deadline time
-    races_df = races_df.sort_values("締切予定時刻")
+    races_df = races_df.sort_values("締切予定時刻")  # Deadline
     
     # Create a mapping of Japanese column names to English
     column_name_mapping = {
-        '日付': 'Date',
-        'レース場': 'Venue',
-        'レース番号': 'Race No.',
-        '締切予定時刻': 'Deadline'
+        '日付': 'Date',  # Date
+        'レース場': 'Venue',  # Venue
+        'レース番号': 'Race No.',  # Race Number
+        '締切予定時刻': 'Deadline'  # Deadline
     }
     
     # Create a venue name mapping (Japanese to English)
@@ -130,15 +130,15 @@ if st.session_state.races_df is not None:
     now_jst = datetime.now(jst)
     
     # Reorder columns to match the requested order: "日付", "締切予定時刻", "レース場", "レース番号"
-    if all(col in races_df.columns for col in ['日付', '締切予定時刻', 'レース場', 'レース番号']):
-        column_order = ['日付', '締切予定時刻', 'レース場', 'レース番号']
+    if all(col in races_df.columns for col in ['日付', '締切予定時刻', 'レース場', 'レース番号']):  # Date, Deadline, Venue, Race Number
+        column_order = ['日付', '締切予定時刻', 'レース場', 'レース番号']  # Date, Deadline, Venue, Race Number
         # Add any other columns that exist in the dataframe but not in our ordered list
         column_order.extend([col for col in races_df.columns if col not in column_order])
         # Reorder the dataframe columns
         races_df = races_df[column_order]
     
-    # Convert レース番号 to string to ensure it displays left-aligned
-    if 'レース番号' in races_df.columns:
+    # Convert レース番号 to string to ensure it displays left-aligned  # Race Number
+    if 'レース番号' in races_df.columns:  # Race Number
         races_df['レース番号'] = races_df['レース番号'].astype(str)
     
     # Remove the last updated timestamp
@@ -152,11 +152,11 @@ if st.session_state.races_df is not None:
     
     # Display each race in a card style
     for i, row in races_df.iterrows():
-        race_id = st.session_state.races_df.loc[i, "レースID"]
+        race_id = st.session_state.races_df.loc[i, "レースID"]  # Race ID
         
         # Get venue name in English
-        venue_en = venue_mapping.get(row['レース場'], row['レース場'])
-        with races_container.expander(f"【{venue_en} Race No.{row['レース番号']}】Deadline: {row['締切予定時刻']}"):
+        venue_en = venue_mapping.get(row['レース場'], row['レース場'])  # Venue
+        with races_container.expander(f"【{venue_en} Race No.{row['レース番号']}】Deadline: {row['締切予定時刻']}"):  # Race Number, Deadline
             # Create a container to display the prediction results for each race
             result_container = st.container()
             
@@ -174,11 +174,11 @@ if st.session_state.races_df is not None:
                         result_df, predict_time = predict_single_race(race_id)
                         if result_df is not None:
                             # Remove the player name column
-                            if '選手名' in result_df.columns:
+                            if '選手名' in result_df.columns:  # Player Name
                                 result_df = result_df.drop(columns=['選手名'])
                             
                             # Sort by the rank column (first column)
-                            if '順位' in result_df.columns:
+                            if '順位' in result_df.columns:  # Rank
                                 result_df = result_df.sort_values('順位')
                             else:
                                 # Consider the first column as the rank if there is no column name
@@ -199,18 +199,18 @@ if st.session_state.races_df is not None:
                 saved_result, saved_time = st.session_state.prediction_results[race_id]
                 
                 # Remove the player name column (if not already removed)
-                if '選手名' in saved_result.columns:
+                if '選手名' in saved_result.columns:  # Player Name
                     saved_result = saved_result.drop(columns=['選手名'])
                 
                 st.write(f"#### Prediction Results")
                 
                 # Create a mapping for prediction result columns
                 prediction_column_mapping = {
-                    '順位': 'Rank',
-                    '艇番': 'Boat No.',
-                    '勝率(予測)': 'Probability of Winning',
-                    '単勝オッズ': 'Odds',
-                    '期待値': 'Expected Return'
+                    '順位': 'Rank',  # Rank
+                    '艇番': 'Boat No.',  # Boat Number
+                    '勝率(予測)': 'Probability of Winning',  # Probability of Winning
+                    '単勝オッズ': 'Odds',  # Odds
+                    '期待値': 'Expected Return'  # Expected Return
                 }
                 
                 # Rename columns for display
@@ -229,11 +229,11 @@ if st.session_state.races_df is not None:
                 st.dataframe(display_result, use_container_width=True)
                 
                 # Extract boats with an expected value greater than 1.0 (positive expected value boats)
-                plus_ev_boats = saved_result[saved_result['期待値'] > 1.0]
+                plus_ev_boats = saved_result[saved_result['期待値'] > 1.0]  # Expected Return
                 if not plus_ev_boats.empty:
                     st.write("#### 💰 Recommended Bets (Boats with an Expected Value greater than 1.0)")
                     for _, boat_row in plus_ev_boats.iterrows():
-                        st.write(f"Boat No. **{int(boat_row['艇番'])}**: Expected Value **{boat_row['期待値']}**")
+                        st.write(f"Boat No. **{int(boat_row['艇番'])}**: Expected Value **{boat_row['期待値']}**")  # Boat Number, Expected Return
                 else:
                     st.info("※ No boats with an expected value greater than 1.0")
 else:

@@ -10,7 +10,7 @@ from utils import preprocess_boatrace_dataframe
 from pyjpboatrace import PyJPBoatrace
 import traceback
 
-# ボートレース場コード一覧
+# List of Boat Race Venue Codes
 boatrace_venues = {
     '01': '桐生',
     '02': '戸田',
@@ -38,37 +38,37 @@ boatrace_venues = {
     '24': '大村'
 }
 
-# 競艇場名からコードを取得する関数（逆引き辞書）
+# Get venue code from venue name (reverse lookup dictionary)
 venue_to_code = {v: k for k, v in boatrace_venues.items()}
 
-# 直前情報ページのURLを構築する関数
+# Build URL for beforeinfo page
 def build_beforeinfo_url(date, venue_code, race_number):
     base_url = "https://www.boatrace.jp/owpc/pc/race/beforeinfo"
     url = f"{base_url}?rno={race_number}&jcd={venue_code}&hd={date}"
     return url
 
-# オッズ情報ページのURLを構築する関数
+# Build URL for odds info page
 def build_odds_url(date, venue_code, race_number):
     base_url = "https://www.boatrace.jp/owpc/pc/race/oddstf"
     url = f"{base_url}?rno={race_number}&jcd={venue_code}&hd={date}"
     return url
 
-# HTMLを取得する関数
+# Function to fetch HTML
 def fetch_html(url):
     try:
         response = requests.get(url, timeout=10)
-        response.raise_for_status()  # エラーがあれば例外を発生させる
+        response.raise_for_status()  # Raise an exception for bad status codes
         return response.text, datetime.now()
     except requests.exceptions.RequestException as e:
-        print(f"エラー: HTMLの取得に失敗しました: {e}")
+        print(f"Error: Failed to fetch HTML: {e}")
         return None, datetime.now()
 
-# 各艇の直前情報をスクレイピングする関数
+# Function to scrape boat info
 def scrape_boat_info(soup):
     boat_info = []
     
     try:
-        # 各艇の情報を取得
+        # Get boat info
         tbody_elements = soup.select('tbody.is-fs12')
         
         for tbody in tbody_elements:
@@ -76,23 +76,23 @@ def scrape_boat_info(soup):
             if boat_number_element:
                 boat_number = boat_number_element.text.strip()
                 
-                # 展示タイム（左から5列目）を取得
-                # 各艇のtbodyの最初の行の5番目のtd要素
+                # Get exhibition time (5th column from left)
+                # Get the 5th td element from the first row of each boat's tbody
                 first_row = tbody.select('tr')[0]
                 td_elements = first_row.select('td')
                 
-                # 艇番、写真、選手名、体重の後に展示タイムがある
-                # rowspanが使われているため、直接インデックスでアクセスできない場合がある
+                # Exhibition time (5th column from left)
+                # rowspan is used, so we can't access it directly by index
                 exhibition_time = "N/A"
                 
                 # 展示タイムは通常、rowspan="4"属性を持つtd要素
                 for td in tbody.select('td[rowspan="4"]'):
-                    # 数値のみを含むtd要素を探す（展示タイム）
+                    # Find td elements containing only numbers (exhibition time)
                     if re.match(r'^\d+\.\d+$', td.text.strip()):
                         exhibition_time = td.text.strip()
                         break
                 
-                # 進入情報を取得（2行目の2列目）
+                # Get entry info (2nd row, 2nd column)
                 rows = tbody.select('tr')
                 entry = "N/A"
                 if len(rows) > 1:
@@ -101,123 +101,123 @@ def scrape_boat_info(soup):
                         entry = entry_cells[1].text.strip()
                 
                 boat_info.append({
-                    '艇番': boat_number,
-                    '展示タイム': exhibition_time,
-                    '進入': entry,
-                    '単勝オッズ': "N/A"  # オッズ情報は別途取得
+                    '艇番': boat_number,  # Boat Number
+                    '展示タイム': exhibition_time,  # Exhibition Time
+                    '進入': entry,  # Entry
+                    '単勝オッズ': "N/A"  # オッズ情報は別途取得  # Win Odds (odds info retrieved separately)
                 })
     except Exception as e:
-        print(f"ボート情報のスクレイピング中にエラーが発生しました: {e}")
+        print(f"Error scraping boat info: {e}")
     
-    # データが取得できなかった場合は空のデータを作成
+    # If no data is retrieved, create empty data
     if not boat_info:
         for i in range(1, 7):
             boat_info.append({
-                '艇番': str(i),
-                '展示タイム': "N/A",
-                '進入': "N/A",
-                '単勝オッズ': "N/A"
+                '艇番': str(i),  # Boat Number
+                '展示タイム': "N/A",  # Exhibition Time
+                '進入': "N/A",  # Entry
+                '単勝オッズ': "N/A"  # Win Odds
             })
     
-    # 艇番順にソート
+    # Sort by boat number
     boat_info.sort(key=lambda x: int(x['艇番']))
     
     return boat_info
 
-# 単勝オッズ情報をスクレイピングする関数
+# Function to scrape single odds info
 def scrape_odds_info(soup):
     odds_info = {}
     
     try:
-        # 単勝オッズテーブルを探す
+        # Find single odds table
         odds_tables = soup.find_all('table')
         
         for table in odds_tables:
-            # テーブルヘッダーに「単勝オッズ」が含まれているか確認
+            # Check if the table header contains "Single Odds"
             header = table.find_previous('div', string=lambda text: text and '単勝オッズ' in text if text else False)
             if header or table.find('th', string=lambda text: text and '単勝オッズ' in text if text else False):
-                # 各行を処理
+                # Process each row
                 rows = table.find_all('tr')
                 for row in rows:
-                    # 最初のセルが艇番、2番目のセルがオッズ値
+                    # First cell is boat number, second cell is odds value
                     cells = row.find_all('td')
                     if len(cells) >= 2:
-                        # 艇番を取得（数字のみ）
+                        # Get boat number (only numbers)
                         boat_number_cell = cells[0]
                         boat_number = boat_number_cell.text.strip()
                         
-                        # 数字のみを抽出
+                        # Extract only numbers
                         if boat_number.isdigit() and 1 <= int(boat_number) <= 6:
-                            # オッズ値を取得
-                            odds_value = cells[-1].text.strip()  # 最後のセルがオッズ値
+                            # Get odds value
+                            odds_value = cells[-1].text.strip()  # Last cell is odds value
                             odds_info[boat_number] = odds_value
         
-        # 別の方法でも試す（テーブルの構造が異なる場合）
+        # Try another method (if the table structure is different)
         if not odds_info:
-            # 艇番のクラス名を使って特定
+            # Use the class name of the boat number to find the specific
             for i in range(1, 7):
-                # 各艇の色に対応するクラス名を持つセルを探す
+                # Find the cell with the class name corresponding to the color of each boat
                 boat_cell = soup.select_one(f'td.is-boatColor{i}')
                 if boat_cell:
-                    # 同じ行内のオッズ値を含むセルを探す
+                    # Find the cell containing the odds value in the same row
                     row = boat_cell.parent
                     if row:
-                        # 最後のセルがオッズ値の場合が多い
+                        # The last cell is often the odds value
                         odds_cell = row.select_one('td:last-child')
                         if odds_cell:
                             odds_value = odds_cell.text.strip()
-                            # 数値形式かどうか確認
+                            # Check if the odds value is in numeric format
                             if re.match(r'^\d+(\.\d+)?$', odds_value):
                                 odds_info[str(i)] = odds_value
     
     except Exception as e:
-        print(f"オッズ情報のスクレイピング中にエラーが発生しました: {e}")
+        print(f"Error scraping odds info: {e}")
     
     return odds_info
 
-# 天候情報をスクレイピングする関数
+# Function to scrape weather info
 def scrape_weather_info(soup):
     weather_info = {
-        '天候': 'N/A',
-        '風向': 'N/A',
-        '風量': 'N/A',
-        '波': 'N/A'
+        '天候': 'N/A',  # Weather Condition
+        '風向': 'N/A',  # Wind Direction
+        '風量': 'N/A',  # Wind Speed
+        '波': 'N/A'  # Wave Height
     }
     
     try:
-        # 天候情報を取得
+        # Get weather info
         weather_section = soup.select_one('.weather1')
         if weather_section:
-            # 天候（雨、曇り、晴れなど）
+            # Weather (rain, cloudy, sunny, etc.)
             weather_unit = weather_section.select_one('.weather1_bodyUnit.is-weather')
             if weather_unit:
                 weather_label = weather_unit.select_one('.weather1_bodyUnitLabelTitle')
                 if weather_label:
                     weather_info['天候'] = weather_label.text.strip()
             
-            # 風向
+            # Wind direction
             wind_direction_element = weather_section.select_one('.weather1_bodyUnit.is-windDirection .weather1_bodyUnitImage')
             if wind_direction_element:
-                # クラス名から風向を抽出（例: is-wind14 → 14）
+                # Extract wind direction from class name (e.g. is-wind14 → 14)
                 wind_direction_class = wind_direction_element.get('class', [])
                 wind_direction = next((cls.replace('is-wind', '') for cls in wind_direction_class if cls.startswith('is-wind')), "N/A")
                 weather_info['風向'] = wind_direction
             
-            # 風量（風速）
+            # Wind speed
             wind_speed_element = weather_section.select_one('.weather1_bodyUnit.is-wind .weather1_bodyUnitLabelData')
             if wind_speed_element:
                 weather_info['風量'] = wind_speed_element.text.strip()
             
-            # 波高
+            # Wave height
             wave_element = weather_section.select_one('.weather1_bodyUnit.is-wave .weather1_bodyUnitLabelData')
             if wave_element:
                 weather_info['波'] = wave_element.text.strip()
     except Exception as e:
-        print(f"天候情報のスクレイピング中にエラーが発生しました: {e}")
+        print(f"Error scraping weather info: {e}")
     
     return weather_info
 
-# ====== 単一レースの予測関数 ======
+# Function to predict single race
 def predict_single_race(race_id):
     try:
         date_str = race_id[:8]  # yyyymmdd
@@ -226,220 +226,220 @@ def predict_single_race(race_id):
         target_date = datetime.strptime(date_str, "%Y%m%d").date()
         stadium_name = boatrace_venues.get(f"{stadium_id:02}", "不明")
 
-        # JSTタイムゾーンの設定
+        # Set JST timezone
         jst = pytz.timezone('Asia/Tokyo')
         
-        # ====== レース基本情報の取得 ======
+        # ====== Get race basic info ======
         scraper = PyJPBoatrace()
         race_info = scraper.get_race_info(d=target_date, stadium=stadium_id, race=race_no)
 
-        # ====== 直前情報とオッズの取得（スクレイピング） ======
-        # 直前情報ページのURLを構築
+        # ====== Get before info and odds (scraping) ======
+        # Build URL for beforeinfo page
         venue_code = f"{stadium_id:02}"
         beforeinfo_url = build_beforeinfo_url(date_str, venue_code, race_no)
         odds_url = build_odds_url(date_str, venue_code, race_no)
         
-        # HTMLの取得
+        # Get HTML
         beforeinfo_html, _ = fetch_html(beforeinfo_url)
         odds_html, prediction_time = fetch_html(odds_url)
         
-        # HTMLが取得できなかった場合はエラー
+        # If HTML is not retrieved, raise an error
         if not beforeinfo_html or not odds_html:
-            raise Exception("直前情報またはオッズ情報の取得に失敗しました")
+            raise Exception("Failed to retrieve before info or odds info")
         
-        # BeautifulSoupでHTMLを解析
+        # Parse HTML with BeautifulSoup
         beforeinfo_soup = BeautifulSoup(beforeinfo_html, 'html.parser')
         odds_soup = BeautifulSoup(odds_html, 'html.parser')
         
-        # 各艇の直前情報を取得
+        # Get before info for each boat
         boat_info = scrape_boat_info(beforeinfo_soup)
         
-        # 単勝オッズ情報を取得
+        # Get single odds info
         odds_info = scrape_odds_info(odds_soup)
         
-        # 単勝オッズ情報をboat_infoに統合
+        # Integrate single odds info into boat_info
         for boat in boat_info:
             boat_number = boat['艇番']
             if boat_number in odds_info:
                 boat['単勝オッズ'] = odds_info[boat_number]
         
-        # 天候情報を取得
+        # Get weather info
         weather_info = scrape_weather_info(beforeinfo_soup)
         
-        # ====== レース基本情報をDataFrameに変換 ======
+        # ====== Convert race basic info to DataFrame ======
         race_entries = []
         for boat_no in range(1, 7):
             boat_key = f"boat{boat_no}"
             boat_data = race_info.get(boat_key, {})
             
-            # boatinfoから対応する艇の情報を取得
+            # Get the corresponding boat info from boat_info
             boat_info_item = next((b for b in boat_info if int(b['艇番']) == boat_no), {})
             
             race_entries.append({
-                "レースID": race_id,
-                "日付": target_date,
-                "会場": stadium_name, # 会場名を追加
-                "艇番": boat_no,
-                "選手名": boat_data.get("name", ""),
-                "級別": boat_data.get("class", ""),
-                "支部": boat_data.get("branch", ""),
-                "全国勝率": boat_data.get("global_win_pt", None),
-                "全国2連率": boat_data.get("global_in2nd", None), # 全国2連率を追加
-                "当地勝率": boat_data.get("local_win_pt", None),
-                "当地2連率": boat_data.get("local_in2nd", None), # 当地2連率を追加
-                "モーター番号": boat_data.get("motor", None),
-                "モーター2連率": boat_data.get("motor_in2nd", None),
-                "ボート番号": boat_data.get("boat", None),
-                "ボート2連率": boat_data.get("boat_in2nd", None),
-                "展示タイム": boat_info_item.get('展示タイム', None),
-                "進入": boat_info_item.get('進入', None),
-                "単勝オッズ": float(boat_info_item.get('単勝オッズ', 0)) if boat_info_item.get('単勝オッズ', 'N/A') != 'N/A' else None,
-                "体重": boat_data.get("weight", None),
-                "年齢": boat_data.get("age", None),
+                "レースID": race_id,  # Race ID
+                "日付": target_date,  # Date
+                "会場": stadium_name, # Add venue name  # Stadium/Venue
+                "艇番": boat_no,  # Boat Number
+                "選手名": boat_data.get("name", ""),  # Racer Name
+                "級別": boat_data.get("class", ""),  # Class
+                "支部": boat_data.get("branch", ""),  # Branch
+                "全国勝率": boat_data.get("global_win_pt", None),  # National Win Rate
+                "全国2連率": boat_data.get("global_in2nd", None), # Add national 2-win rate  # National 2nd Place Rate
+                "当地勝率": boat_data.get("local_win_pt", None),  # Local Win Rate
+                "当地2連率": boat_data.get("local_in2nd", None), # Add local 2-win rate  # Local 2nd Place Rate
+                "モーター番号": boat_data.get("motor", None),  # Motor Number
+                "モーター2連率": boat_data.get("motor_in2nd", None),  # Motor 2nd Place Rate
+                "ボート番号": boat_data.get("boat", None),  # Boat Number
+                "ボート2連率": boat_data.get("boat_in2nd", None),  # Boat 2nd Place Rate
+                "展示タイム": boat_info_item.get('展示タイム', None),  # Exhibition Time
+                "進入": boat_info_item.get('進入', None),  # Entry
+                "単勝オッズ": float(boat_info_item.get('単勝オッズ', 0)) if boat_info_item.get('単勝オッズ', 'N/A') != 'N/A' else None,  # Win Odds
+                "体重": boat_data.get("weight", None),  # Weight
+                "年齢": boat_data.get("age", None),  # Age
             })
 
         df_race = pd.DataFrame(race_entries)
         
-        # 天候情報を各行に追加
+        # Add weather info to each row
         for key, value in weather_info.items():
             df_race[key] = value
             
-        # 「風量」を数値型に変換（「3m」→ 3）
-        if "風量" in df_race.columns:
+        # Convert "風量" to numeric type (e.g. "3m" → 3)
+        if "風量" in df_race.columns:  # Wind Speed
             df_race["風量"] = df_race["風量"].astype(str).str.replace('m', '').str.replace('M', '')
             df_race["風量"] = pd.to_numeric(df_race["風量"], errors="coerce")
         
-        # 「波」を数値型に変換（「3cm」→ 3）
-        if "波" in df_race.columns:
+        # Convert "波" to numeric type (e.g. "3cm" → 3)
+        if "波" in df_race.columns:  # Wave Height
             df_race["波"] = df_race["波"].astype(str).str.replace('cm', '').str.replace('CM', '')
             df_race["波"] = pd.to_numeric(df_race["波"], errors="coerce")
 
-        # 重要データの欠損チェック
-        for col in ["全国勝率", "全国2連率", "当地勝率", "当地2連率", "モーター2連率", "ボート2連率"]:
+        # Check for missing important data
+        for col in ["全国勝率", "全国2連率", "当地勝率", "当地2連率", "モーター2連率", "ボート2連率"]:  # National Win Rate, National 2nd Place Rate, Local Win Rate, Local 2nd Place Rate, Motor 2nd Place Rate, Boat 2nd Place Rate
             if col not in df_race.columns or df_race[col].isnull().all():
-                print(f"重要特徴 '{col}' のデータがありません")
+                print(f"Missing data for important feature '{col}'")
                 if col not in df_race.columns:
-                    # 特徴量が存在しない場合は追加
+                    # Add feature if it doesn't exist
                     df_race[col] = 0
-                    print(f"'{col}' を追加しました（値：0）")
+                    print(f"'{col}' added (value: 0)")
         
-        # 日付情報が無い場合は追加
-        if "日付" in df_race.columns:
+        # If date info is missing, add it
+        if "日付" in df_race.columns:  # Date
             if not pd.api.types.is_datetime64_any_dtype(df_race["日付"]):
                 df_race["日付"] = pd.to_datetime(df_race["日付"], errors="coerce")
         else:
-            # 現在の日付を設定
+            # Set current date
             df_race["日付"] = pd.to_datetime(target_date)
         
-        print("前処理を開始します...")
-        # ====== 前処理 ======
+        print("Starting preprocessing...")
+        # ====== Preprocessing ======
         df_processed = preprocess_boatrace_dataframe(df_race.copy())
-        print("前処理が完了しました")
+        print("Preprocessing completed")
 
-        # ====== モデル読み込み ======
+        # ====== Load model ======
         try:
-            # レース日から、それより前の最新モデルを選択する
+            # Select the latest model before the race date
             race_date = datetime.strptime(date_str, "%Y%m%d").date()
             model_files = sorted(list(Path("models").glob("model_*.pkl")))
             
-            # モデルファイル名から日付を抽出して、レース日より前のものから最新を選択
+            # Extract date from model file name and select the latest model before the race date
             valid_models = []
             for model_file in model_files:
                 try:
-                    # ファイル名からYYYYMMDD部分を抽出
+                    # Extract YYYYMMDD part from file name
                     date_part = model_file.stem.split('_')[1]
                     model_date = datetime.strptime(date_part, "%Y%m%d").date()
                     
-                    # レース日より前のモデルのみ利用可能
+                    # Only use models before the race date
                     if model_date < race_date:
                         valid_models.append((model_date, model_file))
                 except (IndexError, ValueError):
                     pass
             
             if not valid_models:
-                raise Exception(f"レース日({race_date})より前の日付のモデルが見つかりません")
+                raise Exception(f"No model found for dates before race date ({race_date})")
             
-            # 日付で降順ソートして最新のモデルを取得
+            # Sort by date in descending order and get the latest model
             valid_models.sort(reverse=True)
             latest_model_date, model_path = valid_models[0]
-            print(f"レース日({race_date})に対して、{latest_model_date}のモデルを使用します: {model_path}")
+            print(f"Using model from {latest_model_date} for race date ({race_date}): {model_path}")
             
-            # pickelではなくLightGBM直接の読み込みを試みる
+            # Try to load LightGBM directly instead of pickle
             import lightgbm as lgb
             model = lgb.Booster(model_file=str(model_path))
-            print("モデルの読み込みが完了しました (LightGBM直接読み込み)")
+            print("Model loaded (LightGBM direct read)")
         except Exception as e:
-            print(f"LightGBMでのモデル読み込みに失敗しました: {e}")
-            print("バックアップとしてモデルをピクルファイルとして読み込みます...")
+            print(f"Failed to load model (LightGBM): {e}")
+            print("Loading model as pickle file as backup...")
             
             try:
-                # 古いpickleファイルを読むためのprotocol指定
+                # Specify protocol for reading old pickle files
                 with open(model_path, "rb") as f:
                     model = pickle.load(f, encoding='latin1')
-                print("pickleでのモデル読み込みが完了しました")
+                print("Model loaded (pickle)")
             except Exception as e:
-                print(f"モデルのロードに失敗しました: {e}")
-                raise Exception(f"モデルファイルの読み込みに失敗しました: {e}")
+                print(f"Failed to load model: {e}")
+                raise Exception(f"Failed to load model file: {e}")
 
-        # ====== 予測 ======
-        # モデルの特徴量と同じ順序で特徴量を準備
+        # ====== Prediction ======
+        # Prepare features in the same order as the model's features
         feature_cols = [
-            "支部", "級別", "艇番", "会場", "風量", "波", "月", "曜日",
-            "全国勝率_dev", "全国2連率_dev", "当地勝率_dev", "当地2連率_dev",
-            "モーター2連率_dev", "ボート2連率_dev", "展示タイム_dev"
+            "支部", "級別", "艇番", "会場", "風量", "波", "月", "曜日",  # Branch, Class, Boat Number, Stadium, Wind Speed, Wave Height, Month, Day of Week
+            "全国勝率_dev", "全国2連率_dev", "当地勝率_dev", "当地2連率_dev",  # National Win Rate (dev), National 2nd Place Rate (dev), Local Win Rate (dev), Local 2nd Place Rate (dev)
+            "モーター2連率_dev", "ボート2連率_dev", "展示タイム_dev"  # Motor 2nd Place Rate (dev), Boat 2nd Place Rate (dev), Exhibition Time (dev)
         ]
 
-        # 各特徴量が存在するか確認
-        print("特徴量のチェックを行います...")
+        # Check if each feature exists
+        print("Checking features...")
         for feature in feature_cols:
             if feature not in df_processed.columns:
-                print(f"警告: 特徴量 '{feature}' がデータフレームに存在しません")
-                # 特徴量がない場合は適当な値で埋める
+                print(f"Warning: Feature '{feature}' does not exist in the dataframe")
+                # If feature is missing, fill with an appropriate value
                 if feature.endswith('_dev'):
-                    df_processed[feature] = 50  # 偏差値の中央値
+                    df_processed[feature] = 50  # Median value for deviation score
                 else:
                     df_processed[feature] = 0
-                print(f"特徴量 '{feature}' を追加しました")
+                print(f"Feature '{feature}' added")
 
-        # 予測 (LightGBMはpredict_probaではなくpredictを使用)
-        print("予測を実行します...")
+        # Prediction (LightGBM uses predict() instead of predict_proba())
+        print("Running prediction...")
         try:
-            # Boosterオブジェクトの場合はpredict()を使用
+            # If using Booster object, use predict()
             df_processed["pred_proba"] = model.predict(df_processed[feature_cols])
-            print("予測が完了しました")
+            print("Prediction completed")
         except Exception as e:
-            print(f"予測中にエラーが発生しました: {e}")
+            print(f"Error during prediction: {e}")
             raise
 
-        # 勝率を正規化（合計1になるように）
-        print("勝率を正規化します...")
+        # Normalize win rate (total to 1)
+        print("Normalizing win rate...")
         sum_proba = df_processed["pred_proba"].sum()
         if sum_proba > 0:
             df_processed["pred_proba"] = df_processed["pred_proba"] / sum_proba
-        print("勝率の正規化が完了しました")
+        print("Normalization of win rate completed")
 
-        # 期待値の計算
-        df_processed["期待値"] = df_processed["pred_proba"] * df_processed["単勝オッズ"]
+        # Calculate expected value
+        df_processed["期待値"] = df_processed["pred_proba"] * df_processed["単勝オッズ"]  # Expected Value
 
-        # 結果のデータフレームを作成
-        df_result = df_processed[["艇番", "選手名", "pred_proba", "単勝オッズ", "期待値"]].sort_values("pred_proba", ascending=False)
-        df_result.columns = ["艇番", "選手名", "勝率(予測)", "単勝オッズ", "期待値"]
+        # Create result dataframe
+        df_result = df_processed[["艇番", "選手名", "pred_proba", "単勝オッズ", "期待値"]].sort_values("pred_proba", ascending=False)  # Boat Number, Racer Name, Prediction Probability, Win Odds, Expected Value
+        df_result.columns = ["艇番", "選手名", "勝率(予測)", "単勝オッズ", "期待値"]  # Boat Number, Racer Name, Win Rate (Predicted), Win Odds, Expected Value
 
-        # 勝率を%表示に変換
-        df_result["勝率(予測)"] = (df_result["勝率(予測)"] * 100).round(1).astype(str) + '%'
+        # Convert win rate to %
+        df_result["勝率(予測)"] = (df_result["勝率(予測)"] * 100).round(1).astype(str) + '%'  # Win Rate (Predicted)
         
-        # 期待値表示を見やすくする
-        df_result["期待値"] = df_result["期待値"].round(2)
+        # Make expected value more readable
+        df_result["期待値"] = df_result["期待値"].round(2)  # Expected Value
 
-        # 単勝オッズは小数点以下1桁に丸める
-        df_result["単勝オッズ"] = df_result["単勝オッズ"].round(1)
+        # Round single odds to 1 decimal place
+        df_result["単勝オッズ"] = df_result["単勝オッズ"].round(1)  # Win Odds
 
-        # 予測時刻をJSTに変換
+        # Convert prediction time to JST
         prediction_time_jst = prediction_time.astimezone(jst) if prediction_time.tzinfo else jst.localize(prediction_time)
 
         return df_result, prediction_time_jst
 
     except Exception as e:
-        print(f"エラー: {e}")
+        print(f"Error: {e}")
         traceback.print_exc()
         return None, datetime.now()
