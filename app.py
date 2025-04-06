@@ -12,11 +12,6 @@ from retrieve_today_races import get_races_by_date, get_available_dates
 st.set_page_config(page_title="競艇予測アプリ", layout="wide")
 st.title("🎉 競艇予測アプリ")
 
-# ====== サイドバー設定 ======
-st.sidebar.write("### メニュー")
-st.sidebar.markdown("- [Streamlit公式](https://streamlit.io)")
-st.sidebar.markdown("- 現在時刻: " + datetime.now().strftime("%Y/%m/%d %H:%M:%S"))
-
 # ====== グローバルセッション用のステート管理 ======
 if "races_df" not in st.session_state:
     st.session_state.races_df = None
@@ -156,7 +151,7 @@ if st.session_state.races_df is not None:
                                 time_info = "時刻不明"
                             
                             # 予測完了のメッセージのみ表示（テーブルは表示しない）
-                            st.success(f"予測完了!（{predict_time.strftime('%H:%M:%S')} 時点 / {time_info}）")
+                            st.success(f"予測完了!")
                         else:
                             st.error("予測に失敗しました。締切済みのレースか、データ不足の可能性があります。")
                     except Exception as e:
@@ -196,7 +191,7 @@ if st.session_state.races_df is not None:
                     print(f"締切時間計算エラー: {e}")
                     time_info = "時刻不明"
                 
-                st.write(f"#### 最新予測結果（{saved_time.strftime('%H:%M:%S')} 時点 / {time_info}）")
+                st.write(f"#### 最新予測結果")
                 st.dataframe(saved_result, use_container_width=True)
                 
                 # 期待値が1.0を超える艇（プラス期待値の艇）を抽出
