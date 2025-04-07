@@ -1,0 +1,34 @@
+# Data directory (CSV files, etc.)
+data/
+
+# Machine learning models (large pkl files)
+models/
+
+# System generated files
+.DS_Store
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment files
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Log files
+*.log
+
+# Cache directory
+.cache/
+.ipynb_checkpoints/
+
+# Editor related
+.vscode/
+.idea/
+
+# Package/build related
+*.egg-info/
+dist/
+build/
