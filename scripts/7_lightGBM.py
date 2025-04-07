@@ -8,46 +8,46 @@ import seaborn as sns
 import os
 import sys
 
-# ===== 日本語フォント（macOS用） =====
+# ===== Japanese Font (for macOS) =====
 mpl.rcParams['font.family'] = ['Hiragino Sans GB', 'AppleGothic']
 
-# ===== 1. データ読み込み =====
-# コマンドライン引数からデータファイルのパスを取得
+# ===== 1. Load Data =====
+# Get the data file path from command line arguments
 if len(sys.argv) < 2:
-    print("エラー: データファイルのパスを指定してください。")
+    print("Error: Please specify the data file path.")
     sys.exit(1)
 
 data_file_path = sys.argv[1]
 
 df = pd.read_csv(data_file_path)
 
-# 日付カラムをdatetime型に変換
-df["日付"] = pd.to_datetime(df["日付"])
+# Convert date column to datetime type
+df["日付"] = pd.to_datetime(df["日付"])  # Date
 
-# ===== 2. 特徴量・目的変数 =====
+# ===== 2. Features and Target Variable =====
 feature_cols = [
-    "支部", "級別", "艇番", "会場", "風量", "波", "月", "曜日",
-    "全国勝率_dev", "全国2連率_dev", "当地勝率_dev", "当地2連率_dev",
-    "モーター2連率_dev", "ボート2連率_dev", "展示タイム_dev",
+    "支部", "級別", "艇番", "会場", "風量", "波", "月", "曜日",  # Branch, Class, Boat Number, Venue, Wind Speed, Wave, Month, Weekday
+    "全国勝率_dev", "全国2連率_dev", "当地勝率_dev", "当地2連率_dev",  # National Win Rate (Deviation), National 2-Connection Rate (Deviation), Local Win Rate (Deviation), Local 2-Connection Rate (Deviation)
+    "モーター2連率_dev", "ボート2連率_dev", "展示タイム_dev",  # Motor 2-Connection Rate (Deviation), Boat 2-Connection Rate (Deviation), Exhibition Time (Deviation)
 ]
 X = df[feature_cols]
 y = df["is_win"]
 
-# ===== 3. 時系列分割 =====
-df = df.sort_values("日付")
-# 日付単位で分割（同じ日はtrain/testに跨がないように）
-unique_dates = df["日付"].dt.date.unique()
+# ===== 3. Time Series Split =====
+df = df.sort_values("日付")  # Date
+# Split by date (ensure the same day is not split between train/test)
+unique_dates = df["日付"].dt.date.unique()  # Date
 unique_dates.sort()
-split_idx = int(len(unique_dates) * 0.8)  # 80%をトレーニングデータに
+split_idx = int(len(unique_dates) * 0.8)  # 80% for training data
 split_date = unique_dates[split_idx]
-print(f"データ分割日: {split_date} （この日より前がトレーニングデータ、この日以降がテストデータ）")
+print(f"Split date: {split_date} (Data before this date is for training, data from this date onwards is for testing)")
 
-train_base_df = df[df["日付"].dt.date < split_date].copy()
-test_all_df = df[df["日付"].dt.date >= split_date].copy()
-print(f"トレーニングベースデータ: {len(train_base_df)}行 ({train_base_df['日付'].min()} 〜 {train_base_df['日付'].max()})")
-print(f"テスト対象データ: {len(test_all_df)}行 ({test_all_df['日付'].min()} 〜 {test_all_df['日付'].max()})")
+train_base_df = df[df["日付"].dt.date < split_date].copy()  # Date
+test_all_df = df[df["日付"].dt.date >= split_date].copy()  # Date
+print(f"Training base data: {len(train_base_df)} rows ({train_base_df['日付'].min()} 〜 {train_base_df['日付'].max()})")  # Date
+print(f"Test target data: {len(test_all_df)} rows ({test_all_df['日付'].min()} 〜 {test_all_df['日付'].max()})")  # Date
 
-# ウォークフォワード方式のパラメータ設定
+# Walk-forward method parameters
 params = {
     "objective": "binary",
     "metric": "auc",
@@ -56,37 +56,37 @@ params = {
     "random_state": 42
 }
 
-# ===== 4 & 5. ウォークフォワード方式によるモデル評価（実運用に近い方法） =====
-print("\n===== ウォークフォワード方式による評価 =====")
-print("各レース日ごとにその時点までのデータでモデルを構築し、当日のレースのみ予測します")
+# ===== 4 & 5. Model Evaluation using Walk-Forward Method =====
+print("\n===== Evaluation using Walk-Forward Method =====")
+print("For each race day, build a model with data up to that point and predict only the races of that day")
 
-# テスト期間の各日付を取得
-test_dates = sorted(test_all_df["日付"].dt.date.unique())
+# Get all test dates
+test_dates = sorted(test_all_df["日付"].dt.date.unique())  # Date
 
-# 全予測結果を保存するDataFrame
+# DataFrame to save all predictions
 all_predictions = []
 
 for i, test_date in enumerate(test_dates):
-    # 進捗表示
-    print(f"\n評価中: {test_date} ({i+1}/{len(test_dates)})")
+    # Progress display
+    print(f"\nEvaluating: {test_date} ({i+1}/{len(test_dates)})")
     
-    # その日のデータ
-    test_df = test_all_df[test_all_df["日付"].dt.date == test_date].copy()
+    # Data of the day
+    test_df = test_all_df[test_all_df["日付"].dt.date == test_date].copy()  # Date
     
-    # その日より前のデータ全て（訓練用）
-    train_df = df[df["日付"].dt.date < test_date].copy()
+    # All data before the day (for training)
+    train_df = df[df["日付"].dt.date < test_date].copy()  # Date
     
-    print(f"  訓練データ: {len(train_df)}行, テストデータ: {len(test_df)}行")
+    print(f"  Training data: {len(train_df)} rows, Test data: {len(test_df)} rows")
     
-    # 訓練データとテストデータを準備
+    # Prepare training and test data
     X_train = train_df[feature_cols]
     y_train = train_df["is_win"]
     X_test = test_df[feature_cols]
     y_test = test_df["is_win"]
     
-    # 訓練データを学習用と検証用に分割（検証用は最新の20%）
+    # Split training data into training and validation (latest 20% for validation)
     train_rows = len(train_df)
-    if train_rows > 1000:  # 十分なデータがある場合のみ分割
+    if train_rows > 1000:  # Split only if there is enough data
         val_size = int(train_rows * 0.2)
         train_idx = train_rows - val_size
         
@@ -95,11 +95,11 @@ for i, test_date in enumerate(test_dates):
         X_train_val = X_train.iloc[train_idx:]
         y_train_val = y_train.iloc[train_idx:]
         
-        # LightGBMデータセット作成
+        # Create LightGBM datasets
         train_data = lgb.Dataset(X_train_train, label=y_train_train)
         val_data = lgb.Dataset(X_train_val, label=y_train_val)
         
-        # モデル学習（早期停止用の検証データを使用）
+        # Train model (using validation data for early stopping)
         model = lgb.train(
             params,
             train_data,
@@ -108,76 +108,93 @@ for i, test_date in enumerate(test_dates):
             callbacks=[lgb.early_stopping(stopping_rounds=10, verbose=False)]
         )
     else:
-        # データが少ない場合はearly stoppingなしで学習
+        # Train without early stopping if data is limited
         train_data = lgb.Dataset(X_train, label=y_train)
         model = lgb.train(
             params,
             train_data,
-            num_boost_round=50  # early stoppingがないので少なめに
+            num_boost_round=50  # Fewer rounds without early stopping
         )
     
-    # 予測
+    # Predict
     test_df["pred_proba"] = model.predict(X_test)
     test_df["pred_label"] = (test_df["pred_proba"] > 0.5).astype(int)
     
-    # 簡易評価（当日分のみ）
+    # Simple evaluation (for the day)
     if len(test_df) > 0:
         daily_accuracy = accuracy_score(test_df["is_win"], test_df["pred_label"])
-        print(f"  当日の予測精度: {daily_accuracy:.4f}")
+        print(f"  Daily prediction accuracy: {daily_accuracy:.4f}")
     
-    # 結果を保存
+    # Save results
     all_predictions.append(test_df)
 
-# 全予測結果を結合
+# Combine all predictions
 test_all_predictions = pd.concat(all_predictions)
 
-# 結果の評価
+# Evaluate results
 y_test = test_all_predictions["is_win"]
 y_pred_proba = test_all_predictions["pred_proba"]
 y_pred_label = test_all_predictions["pred_label"]
 
-print("\n=== ウォークフォワード方式による総合評価結果 ===")
+print("\n=== Overall Evaluation Results using Walk-Forward Method ===")
 print("AUC:", round(roc_auc_score(y_test, y_pred_proba), 4))
 print("Accuracy:", round(accuracy_score(y_test, y_pred_label), 4))
 print(classification_report(y_test, y_pred_label))
 
-# テストデータを更新（ウォークフォワード方式の結果を使用）
+# Update test data (using walk-forward results)
 test_df = test_all_predictions
 
-# ===== 6. 特徴量重要度 =====
+# ===== 6. Feature Importance =====
+# Check graph save directory
+graphs_dir = "graphs"
+if not os.path.exists(graphs_dir):
+    os.makedirs(graphs_dir)
+    print(f"Created directory for saving graphs: {graphs_dir}")
+
+# Create feature importance graph
+plt.figure(figsize=(10, 6))
 lgb.plot_importance(model, max_num_features=15, figsize=(10, 6))
 plt.title("Feature Importance")
+
+# Get the latest date in the data and use it in the file name
+latest_date = df["日付"].max().strftime('%Y%m%d')  # Date
+feature_importance_path = os.path.join(graphs_dir, f"feature_importance_{latest_date}.png")
+
+# Save graph
+plt.tight_layout()
+plt.savefig(feature_importance_path, dpi=300)
+print(f"Saved feature importance graph: {feature_importance_path}")
 # plt.show()
 
-# ===== 7. 期待値計算 =====
-# オッズ変動を考慮した補正関数（高オッズほど大きく下げる）
+# ===== 7. Expected Value Calculation =====
+# Adjustment function considering odds fluctuation (lower high odds more)
 def adjusted_odds(raw_odds, weight=0.2):
     """
-    実際の運用時のオッズ変動を考慮した補正関数
-    高オッズほど大きく下げる（逆に低オッズは変化少）
+    Adjustment function considering actual odds fluctuation
+    Lower high odds more (less change for low odds)
     
     Parameters:
     -----------
     raw_odds : float
-        元のオッズ値
+        Original odds value
     weight : float, default=0.2
-        補正の強さ（大きいほど補正が強くなる）
+        Strength of adjustment (higher value means stronger adjustment)
     
     Returns:
     --------
     float
-        補正後のオッズ値
+        Adjusted odds value
     """
     return raw_odds * (1 - weight * (1 / raw_odds))
 
-# テストデータの期待値計算（予測確率はウォークフォワード予測の結果を使用）
-test_df["odds_actual"] = test_df["単勝オッズ"] / 100
+# Calculate expected value for test data (using walk-forward prediction results)
+test_df["odds_actual"] = test_df["単勝オッズ"] / 100  # Win Odds
 test_df["odds_adjusted"] = test_df["odds_actual"].apply(adjusted_odds)
-test_df["expected_return_raw"] = test_df["pred_proba"] * test_df["odds_actual"]  # 従来の計算方法
-test_df["expected_return"] = test_df["pred_proba"] * test_df["odds_adjusted"]  # オッズ変動考慮版
+test_df["expected_return_raw"] = test_df["pred_proba"] * test_df["odds_actual"]  # Traditional calculation method
+test_df["expected_return"] = test_df["pred_proba"] * test_df["odds_adjusted"]  # Considering odds fluctuation
 
-# 補正前後の期待値の比較
-print("\n=== オッズ変動補正の効果 ===")
+# Compare expected values before and after adjustment
+print("\n=== Effect of Odds Fluctuation Adjustment ===")
 odds_comparison = test_df.groupby(pd.cut(test_df["odds_actual"], 
                          bins=[0, 1.5, 2, 3, 5, 10, 50, 1000], 
                          labels=["〜1.5倍", "1.5〜2倍", "2〜3倍", "3〜5倍", "5〜10倍", "10〜50倍", "50倍〜"])).agg({
@@ -185,233 +202,437 @@ odds_comparison = test_df.groupby(pd.cut(test_df["odds_actual"],
     "odds_adjusted": "mean",
     "expected_return_raw": "mean",
     "expected_return": "mean",
-    "レースID": "count"
-}).rename(columns={"レースID": "件数"})
+    "レースID": "count"  # Race ID
+}).rename(columns={"レースID": "件数"})  # Count
 
-odds_comparison["補正率"] = (odds_comparison["odds_adjusted"] / odds_comparison["odds_actual"] - 1) * 100
-odds_comparison["期待値変化率"] = (odds_comparison["expected_return"] / odds_comparison["expected_return_raw"] - 1) * 100
+odds_comparison["補正率"] = (odds_comparison["odds_adjusted"] / odds_comparison["odds_actual"] - 1) * 100  # Adjustment Rate
+odds_comparison["期待値変化率"] = (odds_comparison["expected_return"] / odds_comparison["expected_return_raw"] - 1) * 100  # Expected Value Change Rate
 
-print(odds_comparison[["件数", "odds_actual", "odds_adjusted", "補正率", "expected_return_raw", "expected_return", "期待値変化率"]])
+print(odds_comparison[["件数", "odds_actual", "odds_adjusted", "補正率", "expected_return_raw", "expected_return", "期待値変化率"]])  # Count, Adjustment Rate, Expected Value Change Rate
 
-# ===== 8. 推奨買い目表示 =====
+# ===== 8. Recommended Bets Display =====
 def recommend_bets(df, threshold=1.0):
     return df[df["expected_return"] > threshold].sort_values("expected_return", ascending=False)
 
-print("\n=== 期待値が高いおすすめ買い目 ===")
-print(recommend_bets(test_df)[["レースID", "艇番", "pred_proba", "odds_actual", "expected_return"]].head(10))
+print("\n=== Recommended Bets with High Expected Value ===")
+print(recommend_bets(test_df)[["レースID", "艇番", "pred_proba", "odds_actual", "expected_return"]].head(10))  # Race ID, Boat Number
 
-# ===== 8.5 払戻金分布の可視化 =====
+# ===== 8.5 Visualization of Payout Distribution =====
 def visualize_returns(df):
-    # 払戻金の計算
+    # Calculate payout
     df = df.copy()
-    df["払戻"] = df["is_win"] * df["odds_actual"] * 100
+    df["払戻"] = df["is_win"] * df["odds_actual"] * 100  # Payout
     
-    # 払戻金の分布を可視化
+    # Visualize payout distribution
     plt.figure(figsize=(10, 6))
-    sns.histplot(df["払戻"], bins=50)
-    plt.title("払戻金の分布")
-    plt.xlabel("払戻金額（円）")
-    plt.ylabel("頻度")
+    sns.histplot(df["払戻"], bins=50)  # Payout
+    plt.title("Payout Distribution")
+    plt.xlabel("Payout Amount (Yen)")
+    plt.ylabel("Frequency")
     # plt.show()
     
-    # オッズ別の回収率分析
+    # ROI analysis by odds
     df["オッズ区間"] = pd.cut(df["odds_actual"], 
                           bins=[0, 1.5, 2, 3, 5, 10, 50, 1000], 
-                          labels=["〜1.5倍", "1.5〜2倍", "2〜3倍", "3〜5倍", "5〜10倍", "10〜50倍", "50倍〜"])
+                          labels=["〜1.5倍", "1.5〜2倍", "2〜3倍", "3〜5倍", "5〜10倍", "10〜50倍", "50倍〜"])  # Odds Range
     
     odds_roi = df.groupby("オッズ区間").apply(
         lambda x: pd.Series({
-            "ベット数": len(x),
-            "的中数": x["is_win"].sum(),
-            "的中率": x["is_win"].mean() * 100,
-            "投資額": len(x) * 100,
-            "払戻額": (x["is_win"] * x["odds_actual"] * 100).sum(),
-            "回収率": (x["is_win"] * x["odds_actual"] * 100).sum() / (len(x) * 100) * 100
+            "ベット数": len(x),  # Number of Bets
+            "的中数": x["is_win"].sum(),  # Number of Hits
+            "的中率": x["is_win"].mean() * 100,  # Hit Rate
+            "投資額": len(x) * 100,  # Investment Amount
+            "払戻額": (x["is_win"] * x["odds_actual"] * 100).sum(),  # Payout Amount
+            "回収率": (x["is_win"] * x["odds_actual"] * 100).sum() / (len(x) * 100) * 100  # ROI
         })
     )
     
-    print("\n=== オッズ別回収率 ===")
+    print("\n=== ROI by Odds ===")
     print(odds_roi)
     
-    # オッズ別回収率の可視化
+    # Visualize ROI by odds
     plt.figure(figsize=(12, 6))
-    sns.barplot(x=odds_roi.index, y=odds_roi["回収率"])
-    plt.title("オッズ別の回収率")
-    plt.ylabel("回収率（%）")
-    plt.axhline(y=100, color='r', linestyle='-', alpha=0.3)  # 100%ライン
+    sns.barplot(x=odds_roi.index, y=odds_roi["回収率"])  # ROI
+    plt.title("ROI by Odds")
+    plt.ylabel("ROI (%)")
+    plt.axhline(y=100, color='r', linestyle='-', alpha=0.3)  # 100% line
     plt.xticks(rotation=45)
     plt.tight_layout()
     # plt.show()
     
-    # 大当たりの影響分析
-    threshold = 1000  # 1000円以上を大当たりと定義
-    big_wins = df[df["払戻"] >= threshold]
+    # Big win impact analysis
+    threshold = 1000  # Define big win as 1000 yen or more
+    big_wins = df[df["払戻"] >= threshold]  # Payout
     
     if len(big_wins) > 0:
-        print(f"\n=== 大当たり（{threshold}円以上）の影響 ===")
-        total_return = df["払戻"].sum()
-        big_win_return = big_wins["払戻"].sum()
+        print(f"\n=== Impact of Big Wins (¥{threshold} or more) ===")
+        total_return = df["払戻"].sum()  # Payout
+        big_win_return = big_wins["払戻"].sum()  # Payout
         total_cost = len(df) * 100
         
-        print(f"大当たり回数: {len(big_wins)}回")
-        print(f"大当たりによる払戻合計: ¥{big_win_return:,.0f} ({big_win_return/total_return*100:.1f}%の寄与率)")
+        print(f"Number of big wins: {len(big_wins)}")
+        print(f"Total payout from big wins: ¥{big_win_return:,.0f} ({big_win_return/total_return*100:.1f}% contribution)")
         
-        # 大当たりを除いた場合の回収率
+        # ROI excluding big wins
         roi_with_big = total_return / total_cost
         roi_without_big = (total_return - big_win_return) / total_cost
         
-        print(f"全体の回収率: {roi_with_big*100:.2f}%")
-        print(f"大当たりを除いた回収率: {roi_without_big*100:.2f}%")
+        print(f"Overall ROI: {roi_with_big*100:.2f}%")
+        print(f"ROI excluding big wins: {roi_without_big*100:.2f}%")
         
-        # 大当たり一覧
-        print("\n=== 大当たり詳細 ===")
-        print(big_wins[["レースID", "艇番", "odds_actual", "払戻"]].sort_values("払戻", ascending=False))
+        # Big win details
+        print("\n=== Big Win Details ===")
+        print(big_wins[["レースID", "艇番", "odds_actual", "払戻"]].sort_values("払戻", ascending=False))  # Race ID, Boat Number, Payout
 
-# テストデータの払戻金分布を可視化
-print("\n=== テストデータの払戻金分析 ===")
+# Visualize payout distribution for test data
+print("\n=== Payout Analysis for Test Data ===")
 visualize_returns(test_df)
 
-# ===== 9. バックテスト：期待値最大の1艇に100円ずつ =====
+# ===== 9. Backtest: Bet 100 yen on the top 1 boat with the highest expected value =====
 def simulate_top1(df):
     df = df.copy()
-    # オッズ調整後の期待値でソート
-    top_bets = df.groupby("レースID").apply(lambda x: x.sort_values("expected_return", ascending=False).head(1)).reset_index(drop=True)
+    # Sort by adjusted expected value
+    top_bets = df.groupby("レースID").apply(lambda x: x.sort_values("expected_return", ascending=False).head(1)).reset_index(drop=True)  # Race ID
     total_bets = len(top_bets)
     total_cost = 100 * total_bets
-    # 実際の払戻計算は調整前のオッズを使用（実際の払戻はオッズ板の値で計算されるため）
+    # Calculate actual payout using unadjusted odds (actual payout is calculated using odds board values)
     total_return = (top_bets["is_win"] * top_bets["odds_actual"] * 100).sum()
     roi = total_return / total_cost
-    print("\n=== バックテスト（Top1艇） ===")
-    print(f"ベット数: {total_bets} 回")
-    print(f"投資金額: ¥{total_cost:,.0f}")
-    print(f"払戻金額: ¥{total_return:,.0f}")
-    print(f"回収率 (ROI): {roi * 100:.2f}%")
+    print("\n=== Backtest (Top 1 Boat) ===")
+    print(f"Number of bets: {total_bets}")
+    print(f"Total investment: ¥{total_cost:,.0f}")
+    print(f"Total payout: ¥{total_return:,.0f}")
+    print(f"ROI: {roi * 100:.2f}%")
     
-    # Top1の的中率とオッズ分布
-    print(f"的中率: {top_bets['is_win'].mean() * 100:.2f}%")
-    print(f"平均オッズ: {top_bets['odds_actual'].mean():.2f}倍")
+    # Top 1 hit rate and odds distribution
+    print(f"Hit rate: {top_bets['is_win'].mean() * 100:.2f}%")
+    print(f"Average odds: {top_bets['odds_actual'].mean():.2f}")
     
-    # 払戻金の可視化
-    top_bets["払戻"] = top_bets["is_win"] * top_bets["odds_actual"] * 100
+    # Visualize payout
+    top_bets["払戻"] = top_bets["is_win"] * top_bets["odds_actual"] * 100  # Payout
     visualize_returns(top_bets)
     
     return roi, top_bets
 
 simulate_top1(test_df)
 
-# ===== 10. 分散投資：Top3艇に100円ずつ =====
+# ===== 10. Diversified Investment: Bet 100 yen on the top 3 boats =====
 def simulate_top3(df):
     df = df.copy()
-    # オッズ調整後の期待値でソート
-    top3_bets = df.groupby("レースID").apply(lambda x: x.sort_values("expected_return", ascending=False).head(3)).reset_index(drop=True)
+    # Sort by adjusted expected value
+    top3_bets = df.groupby("レースID").apply(lambda x: x.sort_values("expected_return", ascending=False).head(3)).reset_index(drop=True)  # Race ID
     total_bets = len(top3_bets)
     total_cost = 100 * total_bets
-    # 実際の払戻計算は調整前のオッズを使用
+    # Calculate actual payout using unadjusted odds
     total_return = (top3_bets["is_win"] * top3_bets["odds_actual"] * 100).sum()
     roi = total_return / total_cost
-    print("\n=== 分散投資（Top3艇） ===")
-    print(f"ベット数: {total_bets} 回（各レース3艇）")
-    print(f"投資金額: ¥{total_cost:,.0f}")
-    print(f"払戻金額: ¥{total_return:,.0f}")
-    print(f"回収率 (ROI): {roi * 100:.2f}%")
+    print("\n=== Diversified Investment (Top 3 Boats) ===")
+    print(f"Number of bets: {total_bets} (3 boats per race)")
+    print(f"Total investment: ¥{total_cost:,.0f}")
+    print(f"Total payout: ¥{total_return:,.0f}")
+    print(f"ROI: {roi * 100:.2f}%")
     
-    # Top3の的中率とオッズ分布
-    print(f"的中率: {top3_bets['is_win'].mean() * 100:.2f}%")
-    print(f"平均オッズ: {top3_bets['odds_actual'].mean():.2f}倍")
+    # Top 3 hit rate and odds distribution
+    print(f"Hit rate: {top3_bets['is_win'].mean() * 100:.2f}%")
+    print(f"Average odds: {top3_bets['odds_actual'].mean():.2f}")
     
-    # 払戻金の可視化
-    top3_bets["払戻"] = top3_bets["is_win"] * top3_bets["odds_actual"] * 100
+    # Visualize payout
+    top3_bets["払戻"] = top3_bets["is_win"] * top3_bets["odds_actual"] * 100  # Payout
     visualize_returns(top3_bets)
     
     return roi, top3_bets
 
 simulate_top3(test_df)
 
-# ===== 11. ケリー基準でベット額計算（Top1艇） =====
+# ===== 11. Kelly Criterion Bet Calculation (Top 1 Boat) =====
 def kelly_bet_fraction(p, b):
-    # bが0以下の場合は0を返す（オッズが1.0以下の場合）
+    # Return 0 if b is 0 or less (odds of 1.0 or less)
     if b <= 0:
         return 0
     return max(0, (p * (b + 1) - 1) / b)
 
 def simulate_kelly(df):
     df = df.copy()
-    # オッズ調整後の期待値でソート
-    top1 = df.groupby("レースID").apply(lambda x: x.sort_values("expected_return", ascending=False).head(1)).reset_index(drop=True)
-    # ケリー基準計算時は調整後のオッズを使用（より現実的な勝率・オッズ関係を反映）
+    # Sort by adjusted expected value
+    top1 = df.groupby("レースID").apply(lambda x: x.sort_values("expected_return", ascending=False).head(1)).reset_index(drop=True)  # Race ID
+    # Use adjusted odds for Kelly criterion calculation (reflects more realistic win rate-odds relationship)
     top1["kelly"] = top1.apply(lambda row: kelly_bet_fraction(row["pred_proba"], row["odds_adjusted"] - 1), axis=1)
-    top1["bet_amt"] = top1["kelly"] * 100  # 100円が元本と仮定
-    top1["bet_amt"] = top1["bet_amt"].clip(0, 100)  # 過剰な賭けを防ぐ
+    top1["bet_amt"] = top1["kelly"] * 100  # Assume 100 yen as the principal
+    top1["bet_amt"] = top1["bet_amt"].clip(0, 100)  # Prevent excessive betting
     total_cost = top1["bet_amt"].sum()
-    # 実際の払戻計算は調整前のオッズを使用
+    # Calculate actual payout using unadjusted odds
     total_return = (top1["is_win"] * top1["odds_actual"] * top1["bet_amt"]).sum()
     roi = total_return / total_cost
-    print("\n=== ケリー基準ベット（Top1艇） ===")
-    print(f"合計投資: ¥{total_cost:,.0f}")
-    print(f"払戻合計: ¥{total_return:,.0f}")
-    print(f"回収率 (ROI): {roi * 100:.2f}%")
+    print("\n=== Kelly Criterion Bet (Top 1 Boat) ===")
+    print(f"Total investment: ¥{total_cost:,.0f}")
+    print(f"Total payout: ¥{total_return:,.0f}")
+    print(f"ROI: {roi * 100:.2f}%")
     
-    # Kelly戦略の詳細
-    print(f"的中率: {top1['is_win'].mean() * 100:.2f}%")
-    print(f"平均オッズ: {top1['odds_actual'].mean():.2f}倍")
-    print(f"平均調整オッズ: {top1['odds_adjusted'].mean():.2f}倍")
-    print(f"平均ベット額: ¥{top1['bet_amt'].mean():.2f}")
+    # Kelly strategy details
+    print(f"Hit rate: {top1['is_win'].mean() * 100:.2f}%")
+    print(f"Average odds: {top1['odds_actual'].mean():.2f}")
+    print(f"Average adjusted odds: {top1['odds_adjusted'].mean():.2f}")
+    print(f"Average bet amount: ¥{top1['bet_amt'].mean():.2f}")
     
-    # 払戻金の可視化
-    top1["払戻"] = top1["is_win"] * top1["odds_actual"] * top1["bet_amt"]
+    # Visualize payout
+    top1["払戻"] = top1["is_win"] * top1["odds_actual"] * top1["bet_amt"]  # Payout
     visualize_returns(top1)
     
     return roi, top1
 
-# ===== 11.5 閾値ベースの戦略（勝率30%以上かつ期待値1.8以上） =====
+# ===== 11.5 Threshold-Based Strategy (Win rate 30% or more and expected value 1.8 or more) =====
 def simulate_threshold_strategy(df):
     df = df.copy()
-    # 勝率30%以上かつ調整後期待値1.8以上という条件にマッチする艇を抽出
+    # Extract boats that match the condition of win rate 30% or more and adjusted expected value 1.8 or more
     threshold_bets = df[(df["pred_proba"] >= 0.3) & (df["expected_return"] >= 1.8)].copy()
     
-    # 結果集計
+    # Summarize results
     total_bets = len(threshold_bets)
     total_cost = 100 * total_bets
     total_return = (threshold_bets["is_win"] * threshold_bets["odds_actual"] * 100).sum()
     roi = total_return / total_cost if total_cost > 0 else 0
     
-    print("\n=== 閾値ベース戦略（勝率30%以上かつ期待値1.8以上） ===")
-    print(f"ベット数: {total_bets} 回")
-    print(f"投資金額: ¥{total_cost:,.0f}")
-    print(f"払戻金額: ¥{total_return:,.0f}")
-    print(f"回収率 (ROI): {roi * 100:.2f}%")
+    print("\n=== Threshold-Based Strategy (Win rate 30% or more and expected value 1.8 or more) ===")
+    print(f"Number of bets: {total_bets}")
+    print(f"Total investment: ¥{total_cost:,.0f}")
+    print(f"Total payout: ¥{total_return:,.0f}")
+    print(f"ROI: {roi * 100:.2f}%")
     
     if total_bets > 0:
-        # 的中率とオッズの分析
-        print(f"的中率: {threshold_bets['is_win'].mean() * 100:.2f}%")
-        print(f"平均オッズ: {threshold_bets['odds_actual'].mean():.2f}倍")
-        print(f"平均期待値: {threshold_bets['expected_return'].mean():.2f}")
+        # Analyze hit rate and odds
+        print(f"Hit rate: {threshold_bets['is_win'].mean() * 100:.2f}%")
+        print(f"Average odds: {threshold_bets['odds_actual'].mean():.2f}")
+        print(f"Average expected value: {threshold_bets['expected_return'].mean():.2f}")
         
-        # 1日あたりの平均ベット数
-        days_count = threshold_bets["日付"].dt.date.nunique()
-        print(f"対象期間: {days_count}日")
-        print(f"1日あたり平均ベット数: {total_bets / days_count:.1f}回")
+        # Average number of bets per day
+        days_count = threshold_bets["日付"].dt.date.nunique()  # Date
+        print(f"Target period: {days_count} days")
+        print(f"Average number of bets per day: {total_bets / days_count:.1f}")
         
-        # 払戻金の可視化
-        threshold_bets["払戻"] = threshold_bets["is_win"] * threshold_bets["odds_actual"] * 100
+        # Visualize payout
+        threshold_bets["払戻"] = threshold_bets["is_win"] * threshold_bets["odds_actual"] * 100  # Payout
         visualize_returns(threshold_bets)
     else:
-        print("条件に合致するベットがありませんでした。")
+        print("No bets matched the conditions.")
     
     return roi, threshold_bets
 
 simulate_kelly(test_df)
 
-# 閾値ベース戦略の実行
+# Execute threshold-based strategy
 simulate_threshold_strategy(test_df)
 
-# ===== 12. 全データを使った再学習とモデル保存 =====
-print("\n=== 全データを使った再学習 ===")
-# 全データで再学習
+# ===== 12. Asset Transition Simulation =====
+def run_simulation(test_df, initial_capital=3000, daily_budget=1000):
+    """
+    Run asset transition simulation based on four strategies and visualize the results
+
+    Parameters:
+    -----------
+    test_df : DataFrame
+        Test data frame
+    initial_capital : int
+        Initial capital (yen)
+    daily_budget : int
+        Daily investment budget (yen)
+    """
+    print("\n===== Asset Transition Simulation =====")
+    print(f"Initial capital: ¥{initial_capital:,}")
+    print(f"Daily investment budget: ¥{daily_budget:,}")
+    
+    # Get the last 30 days of the dataset
+    test_dates = sorted(test_df["日付"].dt.date.unique())  # Date
+    if len(test_dates) > 30:
+        test_dates = test_dates[-30:]
+        print(f"Simulation for the last 30 days: {test_dates[0]} 〜 {test_dates[-1]}")
+        test_df = test_df[test_df["日付"].dt.date.isin(test_dates)].copy()  # Date
+    else:
+        print(f"Simulation for the entire test period: {test_dates[0]} 〜 {test_dates[-1]}")
+    
+    # List of strategy names
+    strategies = ["Top1 Strategy", "Top3 Strategy", "Kelly Strategy", "Threshold Strategy"]
+    
+    # Dictionaries to record asset transition and investment amount (by strategy)
+    capital_history = {strategy: [] for strategy in strategies}
+    total_investment = {strategy: 0 for strategy in strategies}
+    
+    # Update assets for each date
+    for date in test_dates:
+        day_df = test_df[test_df["日付"].dt.date == date].copy()  # Date
+        
+        # ===== Identify investment targets for each strategy =====
+        
+        # Top1 Strategy: Top 1 boat with the highest expected value for each race
+        top1_bets = day_df.groupby("レースID").apply(
+            lambda x: x.sort_values("expected_return", ascending=False).head(1)
+        ).reset_index(drop=True)  # Race ID
+        
+        # Top3 Strategy: Top 3 boats with the highest expected value for each race
+        top3_bets = day_df.groupby("レースID").apply(
+            lambda x: x.sort_values("expected_return", ascending=False).head(3)
+        ).reset_index(drop=True)  # Race ID
+        
+        # Kelly Strategy: Top 1 boat with the highest expected value for each race
+        kelly_bets = day_df.groupby("レースID").apply(
+            lambda x: x.sort_values("expected_return", ascending=False).head(1)
+        ).reset_index(drop=True)  # Race ID
+        
+        # Calculate Kelly ratio
+        kelly_bets["kelly"] = kelly_bets.apply(
+            lambda row: kelly_bet_fraction(row["pred_proba"], row["odds_adjusted"] - 1) * 0.5, axis=1
+        )
+        
+        # Threshold Strategy: Boats with win rate 30% or more and expected value 1.8 or more
+        threshold_bets = day_df[(day_df["pred_proba"] >= 0.3) & (day_df["expected_return"] >= 1.8)].copy()
+        
+        # ===== Allocate investment amount (adjust daily budget to match total investment for each strategy) =====
+        
+        # Number of bets for each strategy
+        bet_counts = {
+            "Top1 Strategy": len(top1_bets),
+            "Top3 Strategy": len(top3_bets),
+            "Kelly Strategy": len(kelly_bets),
+            "Threshold Strategy": len(threshold_bets)
+        }
+        
+        # Calculate investment unit (divide budget by number of bets, round to minimum 100 yen)
+        bet_units = {}
+        for strategy, count in bet_counts.items():
+            if count > 0:
+                # Investment amount per bet = daily budget ÷ number of bets
+                unit = daily_budget / count
+                # Minimum 100 yen, round to 100 yen units
+                bet_units[strategy] = max(100, int(unit / 100) * 100)
+            else:
+                bet_units[strategy] = 0
+        
+        # ===== Execute investment and update assets for each strategy =====
+        for strategy in strategies:
+            # Get previous day's capital
+            if len(capital_history[strategy]) == 0:
+                current_capital = initial_capital
+            else:
+                current_capital = capital_history[strategy][-1][1]
+            
+            # Bet targets and unit investment amount
+            if strategy == "Top1 Strategy":
+                bets = top1_bets.copy()
+                bet_amount = bet_units[strategy]
+                
+            elif strategy == "Top3 Strategy":
+                bets = top3_bets.copy()
+                # For Top3, divide unit amount by 3 as it bets on 3 boats per race
+                bet_amount = max(100, int(bet_units[strategy] / 3 / 100) * 100)
+                
+            elif strategy == "Kelly Strategy":
+                bets = kelly_bets.copy()
+                if len(bets) > 0:
+                    # Determine investment amount based on Kelly ratio for each race
+                    kelly_sum = bets["kelly"].sum()
+                    if kelly_sum > 0:
+                        # Distribute budget based on Kelly ratio (minimum 100 yen)
+                        bets["bet_ratio"] = bets["kelly"] / kelly_sum
+                        bets["bet_amt"] = (bets["bet_ratio"] * daily_budget / 100).round() * 100
+                        bets["bet_amt"] = bets["bet_amt"].clip(lower=100, upper=1000)
+                    else:
+                        # If Kelly ratio is 0, distribute evenly
+                        bets["bet_amt"] = max(100, int(daily_budget / len(bets) / 100) * 100)
+                bet_amount = None  # Different amount for each race
+                
+            elif strategy == "Threshold Strategy":
+                bets = threshold_bets.copy()
+                bet_amount = bet_units[strategy]
+                
+            # Execute investment
+            if len(bets) > 0:
+                # Check capital
+                if strategy == "Kelly Strategy":
+                    total_bet = bets["bet_amt"].sum()
+                else:
+                    total_bet = len(bets) * bet_amount
+                
+                # If capital is insufficient
+                if current_capital < total_bet:
+                    if strategy == "Kelly Strategy":
+                        # Scale down to match capital
+                        scale_factor = current_capital / total_bet
+                        bets["bet_amt"] = (bets["bet_amt"] * scale_factor / 100).round() * 100
+                        bets["bet_amt"] = bets["bet_amt"].clip(lower=100)
+                        # If still insufficient, sort by expected return
+                        while bets["bet_amt"].sum() > current_capital:
+                            if len(bets) <= 1:
+                                bets = pd.DataFrame()  # Empty
+                                break
+                            bets = bets.sort_values("expected_return", ascending=False).iloc[:-1]
+                        total_bet = bets["bet_amt"].sum()
+                    else:
+                        # Reduce number of bets
+                        max_bets = int(current_capital / bet_amount)
+                        if max_bets == 0:
+                            bets = pd.DataFrame()  # Empty
+                            total_bet = 0
+                        else:
+                            bets = bets.sort_values("expected_return", ascending=False).head(max_bets)
+                            total_bet = len(bets) * bet_amount
+                
+                # Calculate payout
+                if len(bets) > 0:
+                    if strategy == "Kelly Strategy":
+                        total_return = (bets["is_win"] * bets["odds_actual"] * bets["bet_amt"]).sum()
+                    else:
+                        total_return = (bets["is_win"] * bets["odds_actual"] * bet_amount).sum()
+                    
+                    # Update capital
+                    current_capital = current_capital - total_bet + total_return
+                    
+                    # Update cumulative investment amount
+                    total_investment[strategy] += total_bet
+            
+            # Update asset history
+            capital_history[strategy].append((date, current_capital))
+
+    # Convert results to DataFrame
+    result_dfs = {}
+    for strategy, history in capital_history.items():
+        result_dfs[strategy] = pd.DataFrame(history, columns=["日付", "資金"])  # Date, Capital
+    
+    # Display final capital
+    print("\n===== Simulation Results =====")
+    for strategy, df in result_dfs.items():
+        final_capital = df["資金"].iloc[-1]  # Capital
+        roi = (final_capital - initial_capital) / initial_capital * 100
+        print(f"{strategy}: Final Capital ¥{int(final_capital):,} (ROI: {roi:.2f}%)")
+    
+    # Plot graph
+    plt.figure(figsize=(12, 6))
+    for strategy, df in result_dfs.items():
+        plt.plot(df["日付"], df["資金"], marker="o", label=strategy)  # Date, Capital
+    
+    plt.title("Asset Transition Simulation (Comparison of 4 Strategies)")
+    plt.xlabel("Date")
+    plt.ylabel("Capital (Yen)")
+    plt.grid(True)
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    # Save graph
+    latest_date = test_df["日付"].max().strftime('%Y%m%d')  # Date
+    graph_path = os.path.join("graphs", f"asset_simulation_{latest_date}.png")
+    plt.savefig(graph_path, dpi=300)
+    print(f"\nGraph saved: {graph_path}")
+    # plt.show()
+
+# Execute asset transition simulation
+run_simulation(test_df)
+
+# ===== 13. Retraining with All Data and Model Saving =====
+print("\n=== Retraining with All Data ===")
+# Retrain with all data
 X_all = df[feature_cols]
 y_all = df["is_win"]
 
-# 全データを訓練用と検証用に分割
+# Split all data into training and validation sets
 all_rows = len(df)
 val_size = int(all_rows * 0.2)
 train_idx = all_rows - val_size
@@ -432,22 +653,22 @@ final_model = lgb.train(
     callbacks=[lgb.early_stopping(stopping_rounds=10, verbose=False)]
 )
 
-# モデル保存ディレクトリの確認
+# Check model saving directory
 models_dir = "models"
 if not os.path.exists(models_dir):
     os.makedirs(models_dir)
-    print(f"モデル保存用ディレクトリを作成しました: {models_dir}")
+    print(f"Created directory for model saving: {models_dir}")
 
-# データに含まれる最新の日付を取得
-latest_date = df["日付"].max().strftime('%Y%m%d')
+# Get the latest date included in the data
+latest_date = df["日付"].max().strftime('%Y%m%d')  # Date
 
-# モデルを保存
+# Save model
 model_path = os.path.join(models_dir, f"model_{latest_date}.pkl")
 final_model.save_model(model_path)
-print(f"モデルを保存しました: {model_path}")
+print(f"Model saved: {model_path}")
 
-# 特徴量名も保存しておく（予測時に必要）
+# Also save feature names (needed for prediction)
 # feature_cols_path = os.path.join(models_dir, "feature_cols.txt")
 # with open(feature_cols_path, "w") as f:
 #     f.write("\n".join(feature_cols))
-# print(f"特徴量リストを保存しました: {feature_cols_path}")
+# print(f"Feature list saved: {feature_cols_path}")
