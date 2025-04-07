@@ -62,3 +62,83 @@ def preprocess_boatrace_dataframe(df):
         df[f"{col}_dev"] = df.groupby("レースID")[col].transform(calculate_deviation_score)  # Race ID
 
     return df
+
+# Column name mapping function - Japanese to English
+
+def get_japanese_to_english_columns_mapping():
+    """
+    Returns a dictionary that maps Japanese column names to English column names
+    for the datasets in the boatrace predictor project.
+    
+    Returns:
+        dict: A dictionary with Japanese column names as keys and English column names as values
+    """
+    return {
+        # Common columns for merged and race_info datasets
+        "選手登録番": "player_registration_number",
+        "レースID": "race_id",
+        "艇番": "boat_number",
+        "年齢": "age",
+        "支部": "branch",
+        "体重": "weight",
+        "級別": "class",
+        "全国勝率": "national_win_rate",
+        "全国2連率": "national_2nd_rate",
+        "当地勝率": "local_win_rate",
+        "当地2連率": "local_2nd_rate",
+        "モーター2連率": "motor_2nd_rate",
+        "ボート2連率": "boat_2nd_rate",
+        "会場": "venue",
+        "日付": "date",
+        "着": "arrival_position",
+        "選手名": "player_name",
+        "展示タイム": "exhibition_time",
+        "天候": "weather",
+        "風向": "wind_direction",
+        "風量": "wind_volume",
+        "波": "wave",
+        "単勝オッズ": "win_odds",
+        
+        # Additional columns in preprocessed dataset
+        "月": "month",
+        "曜日": "day_of_week",
+        "is_win": "is_win",
+        "全国勝率_dev": "national_win_rate_dev",
+        "全国2連率_dev": "national_2nd_rate_dev",
+        "当地勝率_dev": "local_win_rate_dev",
+        "当地2連率_dev": "local_2nd_rate_dev",
+        "モーター2連率_dev": "motor_2nd_rate_dev",
+        "ボート2連率_dev": "boat_2nd_rate_dev",
+        "展示タイム_dev": "exhibition_time_dev",
+        
+        # Additional columns in race_info dataset
+        "レース場": "race_track",
+        "レース番号": "race_number",
+        "締切予定時刻": "closing_time",
+        "ステータス": "status",
+        "モーター番号": "motor_number",
+        "ボート番号": "boat_id",
+        "進入": "entry"
+    }
+
+def translate_columns_to_english(df):
+    """
+    Translates the column names of a dataframe from Japanese to English
+    
+    Args:
+        df (pandas.DataFrame): DataFrame with Japanese column names
+    
+    Returns:
+        pandas.DataFrame: DataFrame with English column names
+    """
+    mapping = get_japanese_to_english_columns_mapping()
+    renamed_columns = {}
+    
+    for col in df.columns:
+        if col in mapping:
+            renamed_columns[col] = mapping[col]
+    
+    # Only rename columns that exist in the mapping
+    if renamed_columns:
+        return df.rename(columns=renamed_columns)
+    return df

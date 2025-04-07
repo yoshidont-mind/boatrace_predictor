@@ -24,9 +24,14 @@ from tabulate import tabulate
 import matplotlib as mpl
 from sklearn.preprocessing import LabelEncoder
 
+# Add the project root directory to the Python path to import modules from there
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Import translation function from utils.py
+from utils import translate_columns_to_english, get_japanese_to_english_columns_mapping
 
-# Japanese font settings
-mpl.rcParams['font.family'] = ['Hiragino Sans GB', 'AppleGothic', 'Yu Gothic', 'Meiryo', 'sans-serif']
+
+# Font settings - changed from Japanese-specific to use standard sans-serif
+mpl.rcParams['font.family'] = ['sans-serif']
 # Set font size larger
 plt.rcParams['font.size'] = 12
 # Check the directory for saving graphs
@@ -56,6 +61,23 @@ def analyze_data(input_file):
         # Read the CSV file
         print(f"Reading file '{input_file}'...")
         df = pd.read_csv(input_file)
+        
+        # Store original Japanese column names for reference
+        original_columns = df.columns.tolist()
+        
+        # Get mapping dictionary for later reference
+        column_mapping = get_japanese_to_english_columns_mapping()
+        
+        # Translate column names from Japanese to English
+        df = translate_columns_to_english(df)
+        
+        # Show mapping between Japanese and English column names
+        print("\n===== Column Name Translation (Japanese -> English) =====")
+        for orig_col in original_columns:
+            if orig_col in column_mapping:
+                print(f"{orig_col} -> {column_mapping[orig_col]}")
+            else:
+                print(f"{orig_col} -> (no translation available)")
         
         # Display basic information
         print("\n===== Basic Data Information =====")
@@ -166,15 +188,16 @@ def analyze_data(input_file):
         
         # Analyze date columns
         try:
-            if 'date' in df.columns:
+            date_col = 'date'
+            if date_col in df.columns:
                 print("\n===== Analysis of Date Column =====")
-                df['date'] = pd.to_datetime(df['date'])
-                date_range = df['date'].max() - df['date'].min()
-                print(f"Date range: {df['date'].min()} to {df['date'].max()} ({date_range.days} days)")
-                print(f"Number of unique dates: {df['date'].nunique()}")
+                df[date_col] = pd.to_datetime(df[date_col])
+                date_range = df[date_col].max() - df[date_col].min()
+                print(f"Date range: {df[date_col].min()} to {df[date_col].max()} ({date_range.days} days)")
+                print(f"Number of unique dates: {df[date_col].nunique()}")
                 
                 # Data count by month
-                monthly_counts = df['date'].dt.to_period('M').value_counts().sort_index()
+                monthly_counts = df[date_col].dt.to_period('M').value_counts().sort_index()
                 print("\nData count by month:")
                 for period, count in monthly_counts.items():
                     print(f"{period}: {count} entries")
@@ -185,10 +208,18 @@ def analyze_data(input_file):
         print("\n===== Analysis of Target Variable (Rank 1 or Not) =====")
         
         # Create is_win column indicating whether the rank is 1st or not (if not exists)
-        if "is_win" not in df.columns and "着" in df.columns:  # "着" means "Rank"
-            df["is_win"] = df["着"].apply(lambda x: 1 if x == 1 else 0)
-            print("Created is_win column from rank")
-        elif "is_win" not in df.columns:
+        arrival_position_col = 'arrival_position'
+        is_win_col = 'is_win'
+        
+        # Check if is_win exists or can be created from arrival_position (formerly "着")
+        if is_win_col not in df.columns and arrival_position_col in df.columns:
+            df[is_win_col] = df[arrival_position_col].apply(lambda x: 1 if x == 1 else 0)
+            print(f"Created {is_win_col} column from {arrival_position_col}")
+        elif is_win_col not in df.columns and "着" in original_columns:  # Handle case where column wasn't translated
+            japanese_col = "着"
+            df[is_win_col] = df[japanese_col].apply(lambda x: 1 if x == 1 else 0)
+            print(f"Created {is_win_col} column from {japanese_col}")
+        elif is_win_col not in df.columns:
             print("Warning: Skipping target variable analysis due to lack of rank data")
             return True
         
@@ -321,7 +352,7 @@ def analyze_data(input_file):
             for col in selected_cats:
                 # Calculate win rate by category
                 if df[col].nunique() <= 15:  # Only if the number of categories is not too large
-                    win_rate_by_cat = df.groupby(col)["is_win"].mean().sort_values(ascending=False)
+                    win_rate_by_cat = df.groupby(col)[is_win_col].mean().sort_values(ascending=False)
                     counts_by_cat = df.groupby(col).size()
                     
                     # Create dataframe to display
@@ -352,17 +383,45 @@ def analyze_data(input_file):
                     plt.grid(axis='y', linestyle='--', alpha=0.7)
                     plt.tight_layout()
                     
-                    # Save graph
-                    graph_path = f"{GRAPHS_DIR}/win_rate_by_{col.replace(' ', '_')}.png"
+                    # Generate a safe filename without Japanese characters
+                    safe_col_name = col.replace(' ', '_').replace('/', '_')
+                    graph_path = f"{GRAPHS_DIR}/win_rate_by_{safe_col_name}.png"
                     plt.savefig(graph_path, dpi=300, bbox_inches='tight')
                     print(f"Saved win rate graph: {graph_path}")
                     plt.close()
         
         # Relationship between target variable and boat number
-        if "艇番" in df.columns:  # "艇番" means "Boat Number"
+        boat_number_col = 'boat_number'
+        if boat_number_col in df.columns:
             plt.figure(figsize=(10, 6))
-            win_by_lane = df.groupby("艇番")["is_win"].mean().sort_index() * 100
-            counts_by_lane = df.groupby("艇番").size()
+            win_by_lane = df.groupby(boat_number_col)[is_win_col].mean().sort_index() * 100
+            counts_by_lane = df.groupby(boat_number_col).size()
+            
+            # Bar plot
+            ax = sns.barplot(x=win_by_lane.index, y=win_by_lane.values, palette="Blues_d")
+            
+            # Display values and sample size on top of bars
+            for i, p in enumerate(ax.patches):
+                lane_idx = win_by_lane.index[i]
+                ax.annotate(f'{p.get_height():.1f}%\n(n={counts_by_lane[lane_idx]})', 
+                          (p.get_x() + p.get_width() / 2., p.get_height()), 
+                          ha = 'center', va = 'bottom', 
+                          xytext = (0, 5), textcoords = 'offset points')
+            
+            plt.title("Win Rate by Boat Number")
+            plt.xlabel("Boat Number")
+            plt.ylabel("Win Rate (%)")
+            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.tight_layout()
+            plt.savefig(f"{GRAPHS_DIR}/win_rate_by_lane.png", dpi=300, bbox_inches='tight')
+            print(f"Saved win rate by boat number graph: {GRAPHS_DIR}/win_rate_by_lane.png")
+            plt.close()
+        elif "艇番" in original_columns:  # Handle case where column wasn't translated
+            # Try to use the original Japanese column name
+            japanese_col = "艇番"
+            plt.figure(figsize=(10, 6))
+            win_by_lane = df.groupby(japanese_col)[is_win_col].mean().sort_index() * 100
+            counts_by_lane = df.groupby(japanese_col).size()
             
             # Bar plot
             ax = sns.barplot(x=win_by_lane.index, y=win_by_lane.values, palette="Blues_d")
