@@ -691,34 +691,34 @@ def merge_boat_race_data_files(b_files_dir, k_files_dir, output_file_template, d
             single_odds_data = extract_single_odds_from_k_file(k_file, debug=debug)
             
             # Merge using player registration number and race ID as keys
-            merged_data = pd.merge(b_data, k_data, on=['選手登録番', 'レースID', '日付'])
+            merged_data = pd.merge(b_data, k_data, on=['選手登録番', 'レースID', '日付'])  # '選手登録番' = 'Player Registration Number', 'レースID' = 'Race ID', '日付' = 'Date'
             
             # Add single odds data
-            merged_data['単勝オッズ'] = 0  # Set default value
+            merged_data['単勝オッズ'] = 0  # '単勝オッズ' = 'Single Odds', Set default value
             
             for i, row in merged_data.iterrows():
-                race_id = row['レースID']
-                boat_number = row['艇番']
+                race_id = row['レースID']  # 'レースID' = 'Race ID'
+                boat_number = row['艇番']  # '艇番' = 'Boat Number'
                 key = f'{race_id}_{boat_number}'
                 
                 if key in single_odds_data:
-                    merged_data.at[i, '単勝オッズ'] = single_odds_data[key]
+                    merged_data.at[i, '単勝オッズ'] = single_odds_data[key]  # '単勝オッズ' = 'Single Odds'
             
             # Count rows with rank but no single odds
-            missing_odds_count = len(merged_data[(merged_data['着'].notna()) & (merged_data['着'] != '') & 
+            missing_odds_count = len(merged_data[(merged_data['着'].notna()) & (merged_data['着'] != '') &  # '着' = 'Rank'
                                                (merged_data['着'] != '欠') & (merged_data['着'] != 'F') & 
-                                               (merged_data['単勝オッズ'] == 0)])
+                                               (merged_data['単勝オッズ'] == 0)])  # '単勝オッズ' = 'Single Odds'
             
             if missing_odds_count > 0:
                 total_missing_odds += missing_odds_count
                 if debug:
                     print(f"Warning: {date_str} data has {missing_odds_count} rows with rank but no single odds")
                     # Display details of problematic rows
-                    problem_rows = merged_data[(merged_data['着'].notna()) & (merged_data['着'] != '') & 
+                    problem_rows = merged_data[(merged_data['着'].notna()) & (merged_data['着'] != '') &  # '着' = 'Rank'
                                              (merged_data['着'] != '欠') & (merged_data['着'] != 'F') & 
-                                             (merged_data['単勝オッズ'] == 0)]
+                                             (merged_data['単勝オッズ'] == 0)]  # '単勝オッズ' = 'Single Odds'
                     for _, row in problem_rows.head(3).iterrows():
-                        print(f"  Race ID: {row['レースID']}, Boat number: {row['艇番']}, Rank: {row['着']}")
+                        print(f"  Race ID: {row['レースID']}, Boat number: {row['艇番']}, Rank: {row['着']}")  # 'レースID' = 'Race ID', '艇番' = 'Boat Number', '着' = 'Rank'
             
             # Add merged data to list
             all_merged_data.append(merged_data)
@@ -735,8 +735,8 @@ def merge_boat_race_data_files(b_files_dir, k_files_dir, output_file_template, d
         final_data = pd.concat(all_merged_data, ignore_index=True)
         
         # Get the latest date
-        final_data["日付"] = pd.to_datetime(final_data["日付"])
-        latest_date = final_data["日付"].max().strftime('%Y%m%d')
+        final_data["日付"] = pd.to_datetime(final_data["日付"])  # '日付' = 'Date'
+        latest_date = final_data["日付"].max().strftime('%Y%m%d')  # '日付' = 'Date'
         
         # Generate file name with latest date
         output_file = output_file_template.replace("{date}", latest_date)
