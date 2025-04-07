@@ -8,6 +8,11 @@ import seaborn as sns
 import os
 import sys
 
+# Add the project root directory to the Python path to import modules from there
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Import translation function only for feature importance visualization
+from utils import get_japanese_to_english_columns_mapping
+
 # ===== Japanese Font (for macOS) =====
 mpl.rcParams['font.family'] = ['Hiragino Sans GB', 'AppleGothic']
 
@@ -151,10 +156,52 @@ if not os.path.exists(graphs_dir):
     os.makedirs(graphs_dir)
     print(f"Created directory for saving graphs: {graphs_dir}")
 
-# Create feature importance graph
+# Get column name mapping dictionary
+column_mapping = get_japanese_to_english_columns_mapping()
+
+# Create custom feature importance graph with English column names
 plt.figure(figsize=(10, 6))
-lgb.plot_importance(model, max_num_features=15, figsize=(10, 6))
-plt.title("Feature Importance")
+
+# Get feature importance from the model
+importance = model.feature_importance(importance_type='split')
+feature_names = model.feature_name()
+
+# Create a dataframe for easier manipulation
+importance_df = pd.DataFrame({
+    'Feature': feature_names,
+    'Importance': importance
+}).sort_values('Importance', ascending=False)
+
+# Limit to top 15 features
+importance_df = importance_df.head(15)
+
+# Translate feature names to English (if mapping exists)
+translated_names = []
+for feature in importance_df['Feature']:
+    if feature in column_mapping:
+        translated_names.append(column_mapping[feature])
+    else:
+        # Try to match partial names (for columns like x_dev)
+        found = False
+        for jp_name, en_name in column_mapping.items():
+            if feature.startswith(jp_name):
+                # Replace Japanese part with English part
+                translated_name = feature.replace(jp_name, en_name)
+                translated_names.append(translated_name)
+                found = True
+                break
+        if not found:
+            translated_names.append(feature)  # Keep original if no mapping found
+
+importance_df['Translated_Feature'] = translated_names
+
+# Plot with translated feature names
+plt.barh(range(len(importance_df)), importance_df['Importance'], align='center')
+plt.yticks(range(len(importance_df)), importance_df['Translated_Feature'])
+plt.title('Feature Importance')
+plt.xlabel('Importance')
+plt.ylabel('Features')
+plt.gca().invert_yaxis()  # Highest importance at the top
 
 # Get the latest date in the data and use it in the file name
 latest_date = df["日付"].max().strftime('%Y%m%d')  # Date
@@ -163,7 +210,7 @@ feature_importance_path = os.path.join(graphs_dir, f"feature_importance_{latest_
 # Save graph
 plt.tight_layout()
 plt.savefig(feature_importance_path, dpi=300)
-print(f"Saved feature importance graph: {feature_importance_path}")
+print(f"Saved feature importance graph (with English labels): {feature_importance_path}")
 # plt.show()
 
 # ===== 7. Expected Value Calculation =====
