@@ -1,5 +1,5 @@
 # Data directory (CSV files, etc.)
-data/
+# data/
 
 # Machine learning models (large pkl files)
 models/
