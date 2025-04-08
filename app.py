@@ -233,8 +233,8 @@ if st.session_state.races_df is not None:
                 if not plus_ev_boats.empty:
                     st.write("#### 💰 Recommended Bets (Boats with an Expected Value greater than 1.0)")
                     for _, boat_row in plus_ev_boats.iterrows():
-                        st.write(f"Boat No. **{int(boat_row['艇番'])}**: Expected Value **{boat_row['期待値']}**")  # Boat Number, Expected Return
+                        st.write(f"Boat No. **{int(boat_row['艇番'])}**: Expected Return **{boat_row['期待値']}**")  # Boat Number, Expected Return
                 else:
-                    st.info("※ No boats with an expected value greater than 1.0")
+                    st.info("※ No boats with an expected return value greater than 1.0")
 else:
     st.info("Select a date to get the race list")
