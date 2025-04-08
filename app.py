@@ -169,7 +169,7 @@ if st.session_state.races_df is not None:
             
             # Prediction button
             if st.button(f"🔮 Predict this race", key=f"predict_{race_id}"):
-                with st.spinner("Getting last-minute information → Collecting odds → Predicting with model..."):
+                with st.spinner("Scraping the last-minute info (odds, weather, etc.) → Predicting..."):
                     try:
                         result_df, predict_time = predict_single_race(race_id)
                         if result_df is not None:

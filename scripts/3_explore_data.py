@@ -284,6 +284,23 @@ def analyze_data(input_file):
             print(f"Saved correlation coefficient graph: {GRAPHS_DIR}/target_correlation.png")
             plt.close()
             
+            # Add a new heatmap sorted by absolute correlation values
+            plt.figure(figsize=(12, 10))
+            
+            # Sort by absolute correlation values
+            corr_df_abs = pd.DataFrame(corr_data, index=['is_win']).T.sort_values('is_win', key=abs, ascending=False)
+            
+            # Generate heatmap sorted by absolute values
+            sns.heatmap(corr_df_abs, annot=True, fmt=".4f", cmap="coolwarm", center=0,
+                       vmin=-0.4, vmax=0.4, cbar_kws={"shrink": .8}, linewidths=0.5)
+            
+            plt.title("Correlation Coefficients between Features and Target Variable (by Absolute Value)")
+            
+            plt.tight_layout()
+            plt.savefig(f"{GRAPHS_DIR}/target_correlation_abs.png", dpi=300, bbox_inches='tight')
+            print(f"Saved absolute correlation coefficient graph: {GRAPHS_DIR}/target_correlation_abs.png")
+            plt.close()
+            
             # Heatmap (overall correlation)
             plt.figure(figsize=(14, 12))
             # Extract columns with absolute correlation coefficient of 0.1 or higher
